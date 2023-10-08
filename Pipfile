@@ -1,0 +1,19 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+opencv-python = "*"
+pdfplumber = "*"
+numpy = "*"
+matplotlib = "*"
+pandas = "*"
+tqdm = "*"
+
+[dev-packages]
+ipykernel = "*"
+
+[requires]
+python_version = "3.8"
+python_full_version = "3.8.10"

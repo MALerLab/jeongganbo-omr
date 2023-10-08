@@ -2,13 +2,14 @@ import cv2
 import numpy as np
 from typing import List, Dict, Tuple
 from collections import Counter, defaultdict
+from pathlib import Path
 
 JG_MIN_AREA = 8000
 JG_MAX_AREA = 20000
-JG_MIN_WIDTH = 92
+JG_MIN_WIDTH = 85
 JG_MAX_WIDTH = 102
-JG_MIN_HEIGHT = 95
-JG_MAX_HEIGHT = 140
+JG_MIN_HEIGHT = 80
+JG_MAX_HEIGHT = 160
 
 MIN_X_GAP = 5
 MIN_Y_GAP = 5
@@ -22,10 +23,11 @@ JANGDAN_GAK_POS_MIN_DIFF = 4
 PAGE_HEIGHT = 3091
 
 
+
 class JeongganboReader:
   def __init__(self) -> None:
     
-    self.line_min_length = 80
+    self.line_min_length = 70
     self.line_min_thickness = 2
     self.thick_line_thickness = 5
 
@@ -36,20 +38,59 @@ class JeongganboReader:
     self.thick_kernel_v = np.ones((self.line_min_length, self.thick_line_thickness), np.uint8)
     self.final_kernel = np.ones((2, 2), np.uint8)
 
+    self.closing_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (25,25))
+
+  def _repair_v_lines(self, img_bin_v: np.ndarray) -> np.ndarray:
+    # img_bin_v = cv2.morphologyEx(img_bin, cv2.MORPH_OPEN, self.kernel_v)
+
+    contours, _ = cv2.findContours(img_bin_v, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if len(contours) == 0:
+      return img_bin_v
+    v_contours = np.asarray([cv2.boundingRect(c) for c in contours])
+    v_contour_counter = Counter(v_contours[:,1])
+
+    # repair from top
+    most_common_y_pos = v_contour_counter.most_common(1)[0][0]
+    filtered_contours = v_contours[v_contours[:,1] == most_common_y_pos]
+    most_common_len = Counter(filtered_contours[:,3]).most_common(1)[0][0]
+    broken_contours = filtered_contours[filtered_contours[:,3] < most_common_len]
+    for contour in broken_contours:
+        x, y, w, h = contour
+        img_bin_v[y:y+most_common_len, x:x+w] = 255
+    
+    # repair from bottom
+    most_common_end_y = Counter(v_contours[:,1] + v_contours[:,3]).most_common(1)[0][0]
+    filtered_contours = v_contours[ abs(v_contours[:,1] + v_contours[:,3]  - most_common_end_y) < 5 ]
+
+    broken_contours = filtered_contours[filtered_contours[:,3] < most_common_len]
+    for contour in broken_contours:
+        x, y, w, h = contour
+        img_bin_v[y+h-most_common_len:y+h, x:x+w] = 255
+    
+    return img_bin_v
+
 
   def _get_boxes(self, img_bin: np.ndarray) -> np.ndarray:
     img_bin_h = cv2.morphologyEx(img_bin, cv2.MORPH_OPEN, self.kernel_h)
     img_bin_v = cv2.morphologyEx(img_bin, cv2.MORPH_OPEN, self.kernel_v)
+    img_bin_v = self._repair_v_lines(img_bin_v)
 
     img_bin_final = img_bin_h + img_bin_v
     img_bin_final = cv2.dilate(img_bin_final, self.final_kernel, iterations=1)
+    img_bin_final = cv2.morphologyEx(img_bin_final, cv2.MORPH_CLOSE, self.closing_kernel)
 
     _, _, boxes, _ = cv2.connectedComponentsWithStats(~img_bin_final, connectivity=4, ltype=cv2.CV_32S)
 
-    is_large_enough = boxes[:,-1] > JG_MIN_AREA
-    is_small_enough = boxes[:,-1] < JG_MAX_AREA
-    boxes = boxes[is_large_enough & is_small_enough]
+    # is_large_enough = boxes[:,-1] > JG_MIN_AREA
+    # is_small_enough = boxes[:,-1] < JG_MAX_AREA
+    # boxes = boxes[is_large_enough & is_small_enough]
 
+    is_wide_enough = boxes[:,2] > JG_MIN_WIDTH
+    is_narrow_enough = boxes[:,2] < JG_MAX_WIDTH
+    is_tall_enough = boxes[:,3] > JG_MIN_HEIGHT
+    is_short_enough = boxes[:,3] < JG_MAX_HEIGHT
+
+    boxes = boxes[is_wide_enough & is_narrow_enough & is_tall_enough & is_short_enough]
 
     return boxes
   
@@ -73,7 +114,7 @@ class JeongganboReader:
 
     return boxes, h_contours
 
-  def _detect_title_box(self, thick_boxes: np.ndarray) -> np.ndarray:
+  def _detect_title_box(self, img_bin, thick_boxes: np.ndarray) -> np.ndarray:
     # boxes = result of cv2.connectedComponentsWithStats
     # boxes = [x, y, w, h, area]
 
@@ -84,7 +125,18 @@ class JeongganboReader:
     is_tall_enough = thick_boxes[:,3] > TITLE_MIN_HEIGHT
 
     # return thick_boxes[is_wide_enough & is_narrow_enough]
-    return thick_boxes[is_wide_enough & is_narrow_enough & is_tall_enough]
+    boxes = thick_boxes[is_wide_enough & is_narrow_enough & is_tall_enough]
+
+    # for candidate in candidates, check whether it is total blank
+    # if it is total blank, remove it from candidates
+    # if it is not total blank, return it
+    not_blank_boxes = []
+    for box in boxes:
+      x, y, w, h = box[:-1]
+      if np.sum(img_bin[y+3:y+h-3, x+3:x+w-3]) != 0:
+      # if len(np.nonzero(img_bin[y:y+h, x:x+w])[0]) > w * 1.5:
+        not_blank_boxes.append(box)
+    return np.asarray(not_blank_boxes)
 
 
   def _process_img(self, image: np.ndarray) -> np.ndarray:
@@ -108,7 +160,7 @@ class JeongganboReader:
     img_bin = self._process_img(image)
 
     boxes, _, _ = self._get_thick_lines(img_bin)
-    boxes = self._detect_title_box(boxes)
+    boxes = self._detect_title_box(img_bin, boxes)
 
     if len(boxes) == 0:
       return None
@@ -139,14 +191,16 @@ class JeongganboReader:
     return right_page, left_page
 
 
-  def __call__(self, image):
+  def __call__(self, image, return_title_detected=False):
     if isinstance(image, str):
       image = cv2.imread(image)
+    elif isinstance(image, Path):
+      image = cv2.imread(str(image))
     img_bin = self._process_img(image)
 
     jeonggan_boxes = self._get_boxes(img_bin)
     thick_boxes, h_contours = self._get_thick_lines(img_bin)
-    title_box = self._detect_title_box(thick_boxes)
+    title_box = self._detect_title_box(img_bin, thick_boxes)
     # assert len(title_box) <= 1, f"More than 1 title box detected: {len(title_box)}"
     if len(title_box) > 0:
       title_box = title_box[0]
@@ -155,8 +209,36 @@ class JeongganboReader:
         print(f"Title box is detected but it is not on the right side of the page")
         # Page has to be splitted
         return self._split_page_by_title(image, jeonggan_boxes, thick_boxes, h_contours, title_box)
-
+    
+    if return_title_detected:
+      return Page(image, jeonggan_boxes, thick_boxes, h_contours), len(title_box) > 0
     return Page(image, jeonggan_boxes, thick_boxes, h_contours)
+  
+  def parse_multiple_pages(self, image_paths:List[str]):
+    pieces = []
+    temp_pages = []
+    for image_path in image_paths:
+      print(f"Processing {image_path}")
+      if isinstance(image_path, Path):
+        image_path = str(image_path)
+      page, is_title_included = self(image_path, return_title_detected=True)
+      if len(page) == 0:
+        print(f"No jeonggan detected at {image_path}")
+        continue
+      if isinstance(is_title_included, bool) and is_title_included and len(temp_pages) > 0: # new piece start
+        print(f"New piece detected at {image_path}")
+        pieces.append(Piece(temp_pages))
+        temp_pages = []
+      elif isinstance(is_title_included, Page): # two pages are returned, which mean title detected
+        print(f"New piece detected at {image_path}")
+        temp_pages.append(is_title_included)
+        pieces.append(Piece(temp_pages))
+        temp_pages = []
+      temp_pages.append(page)
+    if len(temp_pages) > 0:
+      pieces.append(Piece(temp_pages))
+    return pieces
+  
 
 
 
@@ -219,6 +301,11 @@ class Page:
     self.thick_h_contours = thick_h_contours
 
     self.jeonggan_boxes = boxes
+    if len(self.jeonggan_boxes) == 0:
+      self.jeonggan_list = []
+      self.gaks = []
+      self.new_gak_start_y_pos = []
+      return
     self.gak_x_positions, self.x_map_dict, self.jeonggan_y_positions, self.y_map_dict = self._get_gak_xy_positions(self.jeonggan_boxes)
 
     self.jeonggan_list = [Jeonggan(img, x, y, w, h) for x, y, w, h in self.jeonggan_boxes[:,:-1]]
@@ -374,8 +461,6 @@ class Page:
       gak.daegang_start_beats = sorted(list(set(gak.daegang_start_beats)))  
 
 
-
-  
   def _sort_jeonggan_by_position(self, jeonggan_list):
     jeonggan_list.sort(key=lambda x: (-x.x, x.y))   
     return jeonggan_list
@@ -397,14 +482,35 @@ class Page:
   
   def __repr__(self) -> str:
     return f"Page with {len(self.jeonggan_list)} jeonggan"
+  
+  def __len__(self) -> int:
+    return len(self.jeonggan_list)
+
+
+class Piece:
+  def __init__(self, pages:List[Page]) -> None:
+    self.pages = pages
+
+  def __repr__(self) -> str:
+    return f"Piece with {len(self.pages)} pages"
+
+  @property
+  def gaks(self) -> List[Gak]:
+    return [gak for page in self.pages for gak in page.gaks]
+
+  @property
+  def jeonggans(self) -> List[Jeonggan]:
+    return [jeonggan for page in self.pages for jeonggan in page.jeonggan_list]
 
 
 if __name__ == "__main__":
   image_path = 'haegeum_example.png'
-  # image_path = 'haegeum_pg-042.png'
+  image_path = 'pngs/haegeum_pg-031.png'
+  image_path = 'pngs/daegeum_pg-030.png'
   # image_path = 'haegeum_pg-150.png'
-  image_path = 'haegeum_pg-107.png'
+  # image_path = 'haegeum_pg-107.png'
   # image_path = 'haegeum_pg-236.png'
+  image_path = 'pngs/piri_pg-024.png'
 
   reader = JeongganboReader()
   page = reader(image_path)

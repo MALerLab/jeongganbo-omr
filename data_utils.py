@@ -185,8 +185,8 @@ class JeongganboReader:
     right_h_contours[:,0] -= split_x_pos
     left_h_contours = h_contours[h_contours[:,0] < split_x_pos]
 
-    right_page = Page(right_page, right_jeonggan_boxes, right_thick_boxes, right_h_contours)
-    left_page = Page(left_page, left_jeonggan_boxes, left_thick_boxes, left_h_contours)
+    right_page = Page(right_page, right_jeonggan_boxes, right_thick_boxes, right_h_contours, None)
+    left_page = Page(left_page, left_jeonggan_boxes, left_thick_boxes, left_h_contours, title_box)
 
     return right_page, left_page
 
@@ -203,16 +203,19 @@ class JeongganboReader:
     title_box = self._detect_title_box(img_bin, thick_boxes)
     # assert len(title_box) <= 1, f"More than 1 title box detected: {len(title_box)}"
     if len(title_box) > 0:
+      title_box_detected = True
       title_box = title_box[0]
       right_most_jeonggan_x = jeonggan_boxes[:,0].max()
       if title_box[0] + 3 < right_most_jeonggan_x: # 3 is margin
         print(f"Title box is detected but it is not on the right side of the page")
         # Page has to be splitted
         return self._split_page_by_title(image, jeonggan_boxes, thick_boxes, h_contours, title_box)
-    
+    else:
+      title_box_detected = False
+      title_box = None
     if return_title_detected:
-      return Page(image, jeonggan_boxes, thick_boxes, h_contours), len(title_box) > 0
-    return Page(image, jeonggan_boxes, thick_boxes, h_contours)
+      return Page(image, jeonggan_boxes, thick_boxes, h_contours, title_box), title_box_detected
+    return Page(image, jeonggan_boxes, thick_boxes, h_contours, title_box)
   
   def parse_multiple_pages(self, image_paths:List[str]):
     pieces = []
@@ -256,12 +259,13 @@ class Jeonggan:
     self.gak_id = 0
     self.daegang_id = 0
     self.beat = 0
+    self.piece_beat = None
 
     assert self.w < JG_MAX_WIDTH and self.w > JG_MIN_WIDTH, f"Jeonggan width is not in range: {self.w}"
     assert self.h < JG_MAX_HEIGHT and self.h > JG_MIN_HEIGHT, f"Jeonggan height is not in range: {self.h}"
 
   def __repr__(self) -> str:
-    return f"Jeonggan at ({self.x}, {self.y})"
+    return f"Jeonggan at Gak {self.gak_id}, Daegang {self.daegang_id}, Beat {self.beat}, Piece Beat {self.piece_beat}, img ({self.x}, {self.y})"
   
 
 class Gak:
@@ -276,6 +280,7 @@ class Gak:
     self.org_y = jeonggans[0].org_y
     self.row_id = row_id
     self.order_id = None
+    self.piece_order_id = None
     self.is_jangdan = False
     self.start_beat = 0
     self.daegang_start_beats = [0]
@@ -294,14 +299,15 @@ class Gak:
 
 
 class Page:
-  def __init__(self, img, boxes, thick_boxes, thick_h_contours) -> None:
+  def __init__(self, img:np.ndarray, boxes, thick_boxes, thick_h_contours, title_box=None) -> None:
     self.img = img
     self.boxes = boxes
     self.thick_boxes = thick_boxes
     self.thick_h_contours = thick_h_contours
+    self.title_box = title_box
 
     self.jeonggan_boxes = boxes
-    if len(self.jeonggan_boxes) == 0:
+    if len(self.jeonggan_boxes) == 0: # no jeonggan detected
       self.jeonggan_list = []
       self.gaks = []
       self.new_gak_start_y_pos = []
@@ -313,7 +319,10 @@ class Page:
     self.jeonggan_list = self._sort_jeonggan_by_position(self.jeonggan_list)
     self.gaks, self.new_gak_start_y_pos = self._detect_gak(self.jeonggan_list)
     self._update_gak_beats()
+    self._update_jeonggan_beat()
     self._update_daegang()
+    self._update_jeonggan_daegang()
+
     self._detect_jangdan_gak()
 
     self.jeonggan_list = [jeonggan for gak in self.gaks for jeonggan in gak.jeonggans]
@@ -393,6 +402,10 @@ class Page:
       # assert row[0].y > row[1].y, "First Gak is not on bottom of the row"
       # row[0].start_beat = len(row[1]) - len(row[0])
 
+  def _update_jeonggan_beat(self):
+    for gak in self.gaks:
+      for i, jeonggan in enumerate(gak.jeonggans):
+        jeonggan.beat = gak.start_beat + i
 
   def _detect_jangdan_gak(self):
     thick_boxes = self._concat_continuous_thick_boxes_in_y_pos(self.thick_boxes)
@@ -460,6 +473,13 @@ class Page:
         gak.daegang_start_beats.append(self.jeonggan_y_positions.index(y_pos) - self.jeonggan_y_positions.index(self.new_gak_start_y_pos[gak.row_id]))
       gak.daegang_start_beats = sorted(list(set(gak.daegang_start_beats)))  
 
+  def _update_jeonggan_daegang(self):
+    for gak in self.gaks:
+      for i in range(len(gak.daegang_start_beats)):
+        cur_daegang_start_beat = gak.daegang_start_beats[i]
+        next_daegang_start_beat = gak.daegang_start_beats[i+1] if i+1 < len(gak.daegang_start_beats) else len(gak)
+        for jeonggan in gak.jeonggans[cur_daegang_start_beat:next_daegang_start_beat]:
+          jeonggan.daegang_id = i
 
   def _sort_jeonggan_by_position(self, jeonggan_list):
     jeonggan_list.sort(key=lambda x: (-x.x, x.y))   
@@ -490,9 +510,19 @@ class Page:
 class Piece:
   def __init__(self, pages:List[Page]) -> None:
     self.pages = pages
+    self._update_gak_order_id()
 
   def __repr__(self) -> str:
     return f"Piece with {len(self.pages)} pages"
+
+  def _update_gak_order_id(self):
+    global_offset = 0
+    for i in range(len(self.gaks)):
+      self.gaks[i].piece_order_id = i
+      for j, jeonggan in enumerate(self.gaks[i].jeonggans):
+        jeonggan.gak_id = i
+        jeonggan.piece_beat = global_offset + j
+      global_offset += len(self.gaks[i])
 
   @property
   def gaks(self) -> List[Gak]:

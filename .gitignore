@@ -1,2 +1,15 @@
+notebooks_local/
+
 pdfs/
 pngs/
+test/
+
+graphs/
+data/
+
+wandb/
+
+__pycache__/
+Pipfile.lock
+
+.DS_Store

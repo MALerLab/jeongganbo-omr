@@ -1,0 +1,3 @@
+[submodule "pngs"]
+	path = pngs
+	url = https://github.com/MALerLab/jeongganbo-png.git

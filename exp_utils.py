@@ -135,7 +135,7 @@ class JngMatcher:
     overlap_width = s_br_x - s_tl_x
     overlap_height = s_br_y - s_tl_y
     
-    if s_tl_x == t_tl_x:
+    if ( np.array(source[:-1]) == np.array(target[:-1]) ).all():
       return overlap_width * overlap_height
     
     if s_tl_x < t_tl_x < s_br_x:

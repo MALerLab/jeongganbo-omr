@@ -245,3 +245,88 @@ class JngMatcher:
       index += 1
     
     return bboxs_merged
+  
+  def group_bboxs(self, bboxs, ptrn_size=None, min_ratio=0.6):
+    bboxs = sorted(bboxs, key=lambda b: b[1])
+
+    bbox_groups = []
+    index = 0
+
+    while True:
+      if index > len(bboxs) - 1:
+        break
+      
+      curr = bboxs[index]
+
+      # overlapping box indexs
+      overlaps = self.get_overlaps(bboxs, curr, index, min_ratio=min_ratio)
+
+      if len(overlaps) > 0:
+        overlaps_box = [ tup[0] for tup in overlaps ]
+        overlaps_box.append(curr)
+        
+        bbox_groups.append( overlaps_box )
+        
+        # remove overlaps
+        overlaps_idx = [ tup[1] for tup in overlaps ]
+        overlaps_idx.sort(reverse=True)
+        for overlap_idx in overlaps_idx:
+          assert overlap_idx < len(bboxs), f'index out of range: {overlap_idx} / {len(bboxs) - 1}' 
+          del bboxs[overlap_idx]
+          
+      else:
+        bbox_groups.append( [curr] )
+
+      index += 1
+
+    return bbox_groups
+  
+  @staticmethod
+  def get_bbox_of_bbox_group(bbox_group, img):
+    return_tl = [img.shape[1], img.shape[0]]
+    return_br = [0, 0]
+
+    for bbox in bbox_group:
+      tl_x, tl_y, br_x, br_y, *_ = bbox
+      
+      if tl_x < return_tl[0]:
+        return_tl[0] = tl_x
+      if tl_y < return_tl[1]:
+        return_tl[1] = tl_y
+      
+      if br_x > return_br[0]:
+        return_br[0] = br_x
+      if br_y > return_br[1]:
+        return_br[1] = br_y
+    
+    return return_tl[0], return_tl[1], return_br[0], return_br[1]
+  
+  @classmethod
+  def find_contour_bbox(cls, img, filter_edge_content=True):
+    img_dim = img.shape[:2] # [height, width]
+
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    img_thresh = cv2.threshold(img_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+    # img_thresh = cv2.threshold(img_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+    
+    conts = cv2.findContours(img_thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    conts = conts[0] if len(conts) == 2 else conts[1]
+
+    conts_filtered = []
+
+    for c in conts:
+      x, y, w, h = cv2.boundingRect(c)
+      
+      tl_x, tl_y, br_x, br_y = (x, y, x+w, y+h)
+      
+      if filter_edge_content:
+        is_edge_content = x == 0 or y == 0 or x+w == img_dim[1] or y+h == img_dim[0]
+        is_small = w < (img_dim[1] * 0.3) or h < (img_dim[0] * 0.3)
+        if is_edge_content and is_small:
+          continue
+      
+      conts_filtered.append( (x, y, x+w, y+h) )
+  
+    contour_bbox = cls.get_bbox_of_bbox_group(conts_filtered, img)
+    
+    return contour_bbox, img_thresh, conts_filtered

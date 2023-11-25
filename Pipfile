@@ -4,12 +4,14 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-opencv-python = "*"
-pdfplumber = "*"
-numpy = "*"
+opencv-python = "4.8.1"
+pdfplumber = "0.10.2"
+numpy = "1.24.4"
 matplotlib = "*"
 pandas = "*"
 tqdm = "*"
+pytesseract = "0.3.10"
+opencv-contrib-python = "*"
 
 [dev-packages]
 ipykernel = "*"

@@ -13,3 +13,5 @@ __pycache__/
 Pipfile.lock
 
 .DS_Store
+old_pngs/
+title_pngs/

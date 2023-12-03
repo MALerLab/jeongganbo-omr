@@ -1,39 +1,26 @@
 import cv2
 import numpy as np
 
-def make_jeonggan_generator(reader, jngb):
+# only for experiment purpose
+def make_jeonggan_generator_new(reader, jngb): #TODO: need to delete old one
   jngb_gaks_w_jangdan = jngb[0].gaks
   jngb_gaks = list(filter(lambda x: not x.is_jangdan, jngb_gaks_w_jangdan))
   
   for gak in jngb_gaks:
     for jng in gak.jeonggans:
-      yield jng.img, reader._process_img(jng.img)
+      yield jng.img
 
-def make_jng_gen_and_list(reader, jngb):
-  jng_gen = make_jeonggan_generator(reader, jngb)
-  jng_list = list(make_jeonggan_generator(reader, jngb))
+def make_jeonggan_list(reader, jngb):
+  jng_gen = make_jeonggan_generator_new(reader, jngb)
   
-  return jng_gen, jng_list
+  return list(jng_gen)
 
-def read_jngb(reader, infos):
+def read_jeongganbo(reader, infos):
   name, start, num_page = infos['name'], infos['start'], infos['num_page']
   jngb_paths = [f'pngs/{name}_pg-{str(idx + start).zfill(3)}.png' for idx in range(num_page)]
   jngb = reader.parse_multiple_pages(jngb_paths)
   
   return jngb
-
-def template_matching(img, ptrn, ptrn_size, threshold, mode):
-  img_copy = img.copy()
-  img_gray = cv2.cvtColor(img_copy, cv2.COLOR_BGR2GRAY)
-
-  ptrn_rs = cv2.resize(ptrn, (ptrn_size, ptrn_size))
-  ptrn_gray = cv2.cvtColor(ptrn_rs, cv2.COLOR_BGR2GRAY)
-
-  result = cv2.matchTemplate(img_gray, ptrn_gray, mode)
-
-  yCords, xCords = np.where(result >= threshold) 
-  
-  return yCords, xCords, result
 
 COLOR_DICT = {
   'hwang_dd': (130, 130, 0),
@@ -72,6 +59,294 @@ COLOR_DICT = {
   'tae_u': (255, 192, 100), 
   'tae_uu': (255, 218, 150), 
 }
+
+class JeongganProcessor:
+  def __init__(self, ptrn_size, threshold, mode):
+    self.ptrn_size = ptrn_size
+    self.threshold = threshold
+    self.mode = mode
+  
+  def __call__(self, img, ptrn, ptrn_size=None, threshold=None, mode=None):
+    if not ptrn_size:
+      ptrn_size = self.ptrn_size
+    if not threshold:
+      threshold = self.threshold 
+    if not mode:
+      mode = self.mode
+    
+    xCords, yCords, _ = self.match(img, ptrn, ptrn_size, threshold, mode)
+    
+    bboxs = zip(xCords, yCords)
+    bboxs_merged = self.merge_bboxs(bboxs, ptrn_size) 
+    
+    return bboxs_merged
+  
+  # prep jng img
+  @staticmethod
+  def remove_borders(img, border=2):
+    return np.pad(img[border:-border, border:-border], ((border, border), (border, border), (0, 0)), mode='constant', constant_values=255)
+  
+  # template matching
+  def get_match_bboxs(self, img, ptrn, ptrn_size=None, threshold=None, mode=None):
+    if not ptrn_size:
+      ptrn_size = self.ptrn_size
+    if not threshold:
+      threshold = self.threshold 
+    if not mode:
+      mode = self.mode
+    
+    yCords, xCords, match_result = self.template_match(img, ptrn, ptrn_size, threshold, mode)
+    
+    bboxs_w_confi = [(x, y, x+ptrn_size, y+ptrn_size, match_result[y][x]) for x, y in zip(xCords, yCords)]
+    
+    return bboxs_w_confi
+  
+  # template matching for testing
+  @staticmethod
+  def template_match(img, ptrn, ptrn_size, threshold, mode):
+    img_copy = img.copy()
+    img_gray = cv2.cvtColor(img_copy, cv2.COLOR_BGR2GRAY)
+
+    ptrn_rs = cv2.resize(ptrn, (ptrn_size, ptrn_size))
+    ptrn_gray = cv2.cvtColor(ptrn_rs, cv2.COLOR_BGR2GRAY)
+
+    match_result = cv2.matchTemplate(img_gray, ptrn_gray, mode)
+
+    yCords, xCords = np.where(match_result >= threshold) 
+    
+    return yCords, xCords, match_result
+  
+  @staticmethod
+  def get_overlap_area_match_bbox(source, target):
+    s_tl_x, s_tl_y, s_br_x, s_br_y, *_ = source 
+    t_tl_x, t_tl_y, t_br_x, t_br_y, *_ = target
+    
+    overlap_width = s_br_x - s_tl_x
+    overlap_height = s_br_y - s_tl_y
+    
+    if ( np.array(source[:-1]) == np.array(target[:-1]) ).all():
+      return overlap_width * overlap_height
+    
+    if s_tl_x < t_tl_x < s_br_x:
+      overlap_width = s_br_x - t_tl_x
+    else:
+      overlap_width = t_br_x - s_tl_x
+    
+    if s_tl_y < t_tl_y < s_br_y:
+      overlap_height = s_br_y - t_tl_y
+    else:
+      overlap_height = t_br_y - s_tl_y
+      
+    return overlap_width * overlap_height
+  
+  @classmethod
+  def is_overlap_match_bbox(cls, source, target, min_ratio=0.2):
+    # tl: top-left / br: bottom-right
+    s_tl_x, s_tl_y, s_br_x, s_br_y, *_ = source 
+    t_tl_x, t_tl_y, t_br_x, t_br_y, *_ = target
+    
+    # source top-left x >= target bottom-right x OR target top-left x >= source bottom-right x
+    if ( s_tl_x >= t_br_x or t_tl_x >= s_br_x ):
+      return False
+    # source top-left y >= target bottom-right y OR target top-left y >= source bottom-right y
+    if ( s_tl_y >= t_br_y or t_tl_y >= s_br_y ):
+      return False
+    
+    source_area = (s_br_x - s_tl_x) * (s_br_y - s_tl_y)
+    overlap_area = cls.get_overlap_area_match_bbox(source, target)
+    overlap_ratio = overlap_area / source_area
+    
+    return overlap_ratio > min_ratio
+
+  @classmethod
+  def get_overlaps_match_bbox(cls, bboxs, soruce_bbox, soruce_idx, min_ratio=0.2):
+    overlaps = []
+    for idx, bbox in enumerate(bboxs):
+      if idx > soruce_idx and cls.is_overlap_match_bbox(soruce_bbox, bbox, min_ratio):
+        overlaps.append( (bbox, idx) )
+    return overlaps
+
+  #AVERAGE CENTER POINT AND MAX CONFIDENCE
+  @staticmethod
+  def merge_overlap_match_bboxs(bboxs):
+    centers_x = []
+    centers_y = []
+    
+    for bbox in bboxs:
+      tl_x, tl_y, br_x, br_y, _ = bbox
+      center_x = tl_x + (br_x - tl_x)//2
+      center_y = tl_y + (br_y - tl_y)//2
+      
+      centers_x.append(center_x)
+      centers_y.append(center_y)
+    
+    w_half = (bboxs[0][2] - bboxs[0][0])//2
+    h_half = (bboxs[0][3] - bboxs[0][1])//2
+    
+    center_x = round(np.mean(centers_x))
+    center_y = round(np.mean(centers_y))
+    
+    *_, max_confi =  max(bboxs, key=lambda b: b[3])
+    
+    return center_x - w_half, center_y - h_half, center_x + w_half, center_y + h_half, max_confi
+
+  def merge_match_bboxs(self, bboxs, ptrn_size=None, min_ratio=0.2):
+    if not ptrn_size:
+      ptrn_size = self.ptrn_size
+    
+    bboxs = sorted(bboxs, key=lambda b: b[1])
+    
+    bboxs_merged = []
+    index = 0
+
+    while True:
+      if index > len(bboxs) - 1:
+        break
+      
+      curr = bboxs[index]
+
+      # overlapping box indexs
+      overlaps = self.get_overlaps_match_bbox(bboxs, curr, index, min_ratio)
+      
+      if len(overlaps) > 0:
+        overlap_boxs = [ tup[0] for tup in overlaps]
+        overlap_boxs = [curr] + overlap_boxs
+        
+        bboxs_merged.append( self.merge_overlap_match_bboxs(overlap_boxs) )
+        
+        # remove overlaps
+        overlap_indices = [ tup[1] for tup in overlaps ]
+        overlap_indices.sort(reverse=True)
+        for overlap_idx in overlap_indices:
+          assert overlap_idx < len(bboxs), f'index out of range: {overlap_idx} / {len(bboxs) - 1}' 
+          del bboxs[overlap_idx]
+          
+      else:
+        bboxs_merged.append(curr)
+    
+      index += 1
+    
+    return bboxs_merged
+  
+  def group_overlap_match_bboxs(self, bboxs, ptrn_size=None, min_ratio=0.6):
+    bboxs = sorted(bboxs, key=lambda b: b[1])
+
+    bbox_groups = []
+    index = 0
+
+    while True:
+      if index > len(bboxs) - 1:
+        break
+      
+      curr = bboxs[index]
+
+      # overlapping box indexs
+      overlaps = self.get_overlaps_match_bbox(bboxs, curr, index, min_ratio=min_ratio)
+
+      if len(overlaps) > 0:
+        overlap_boxs = [ tup[0] for tup in overlaps ]
+        overlap_boxs = [curr] + overlap_boxs
+        
+        bbox_groups.append( overlap_boxs )
+        
+        # remove overlaps
+        overlap_indices = [ tup[1] for tup in overlaps ]
+        overlap_indices.sort(reverse=True)
+        for overlap_idx in overlap_indices:
+          assert overlap_idx < len(bboxs), f'index out of range: {overlap_idx} / {len(bboxs) - 1}' 
+          del bboxs[overlap_idx]
+          
+      else:
+        bbox_groups.append( [curr] )
+
+      index += 1
+
+    return bbox_groups
+  
+  @staticmethod
+  def get_bbox_of_match_bbox_group(img, match_bbox_group):
+    return_tl = [img.shape[1], img.shape[0]]
+    return_br = [0, 0]
+
+    for bbox in match_bbox_group:
+      tl_x, tl_y, br_x, br_y, *_ = bbox
+      
+      if tl_x < return_tl[0]:
+        return_tl[0] = tl_x
+      if tl_y < return_tl[1]:
+        return_tl[1] = tl_y
+      
+      if br_x > return_br[0]:
+        return_br[0] = br_x
+      if br_y > return_br[1]:
+        return_br[1] = br_y
+    
+    return return_tl[0], return_tl[1], return_br[0], return_br[1]
+  
+  @classmethod
+  def find_contour_bbox(cls, img, filter_edge_content=True):
+    img_dim = img.shape[:2] # [height, width]
+
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    img_thresh = cv2.threshold(img_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+    
+    conts = cv2.findContours(img_thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    conts = conts[0] if len(conts) == 2 else conts[1]
+
+    conts_filtered = []
+
+    for c in conts:
+      x, y, w, h = cv2.boundingRect(c)
+      
+      tl_x, tl_y, br_x, br_y = (x, y, x+w, y+h)
+      
+      if filter_edge_content:
+        is_edge_content = tl_x == 0 or tl_y == 0 or br_x == img_dim[1] or br_y == img_dim[0]
+        is_small = w < (img_dim[1] * 0.3) or h < (img_dim[0] * 0.3)
+        if is_edge_content and is_small:
+          continue
+      
+      conts_filtered.append( (tl_x, tl_y, br_x, br_y) )
+  
+    contour_bbox = cls.get_bbox_of_match_bbox_group(img, conts_filtered)
+    
+    return contour_bbox, (conts_filtered if filter_edge_content else None)
+
+
+# legacy code for codes before commit 6c46dec
+def make_jeonggan_generator(reader, jngb):
+  jngb_gaks_w_jangdan = jngb[0].gaks
+  jngb_gaks = list(filter(lambda x: not x.is_jangdan, jngb_gaks_w_jangdan))
+  
+  for gak in jngb_gaks:
+    for jng in gak.jeonggans:
+      yield jng.img, reader._process_img(jng.img)
+
+def make_jng_gen_and_list(reader, jngb):
+  jng_gen = make_jeonggan_generator(reader, jngb)
+  jng_list = list(make_jeonggan_generator(reader, jngb))
+  
+  return jng_gen, jng_list
+
+def read_jngb(reader, infos):
+  name, start, num_page = infos['name'], infos['start'], infos['num_page']
+  jngb_paths = [f'pngs/{name}_pg-{str(idx + start).zfill(3)}.png' for idx in range(num_page)]
+  jngb = reader.parse_multiple_pages(jngb_paths)
+  
+  return jngb
+
+def template_matching(img, ptrn, ptrn_size, threshold, mode):
+  img_copy = img.copy()
+  img_gray = cv2.cvtColor(img_copy, cv2.COLOR_BGR2GRAY)
+
+  ptrn_rs = cv2.resize(ptrn, (ptrn_size, ptrn_size))
+  ptrn_gray = cv2.cvtColor(ptrn_rs, cv2.COLOR_BGR2GRAY)
+
+  result = cv2.matchTemplate(img_gray, ptrn_gray, mode)
+
+  yCords, xCords = np.where(result >= threshold) 
+  
+  return yCords, xCords, result
 
 class JngMatcher:
   def __init__(self, ptrn_size, threshold, mode):

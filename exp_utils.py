@@ -284,7 +284,7 @@ class JeongganProcessor:
     return return_tl[0], return_tl[1], return_br[0], return_br[1]
   
   @classmethod
-  def find_contour_bbox(cls, img, filter_edge_content=True):
+  def find_contour_bbox_in_sliced_img(cls, img, filter_edge_content=True):
     img_dim = img.shape[:2] # [height, width]
 
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)

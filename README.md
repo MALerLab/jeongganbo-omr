@@ -1,18 +1,6 @@
 # Welcome to Jeonggan CV branch
 
-## requirements
-
-**please check the Pipfile**
-
-to re-produce my result, you need to install followings
-
-1. tesseract 4
-    * tesseract 4.1.1
-    * tesseract lang presets
-        * chi_sim
-        * chi_tra
-        * [gumblex's retrained chinese presets](https://github.com/gumblex/tessdata_chi)
-            * gumblex_chi_all
-            * gumblex_chi_sim
-            * gumblex_chi_tra
-1. pytesseract 0.3.10
+## done refactoring
+**now, JeongganProcessor class can produce dict containing list of  note position, note name, note bbox for each Jeonggan image**
+    * check JeongganProcessor class in /exp_utils.py
+    * pipeline example in notebooks/jeonggan_process_pipline.ipynb

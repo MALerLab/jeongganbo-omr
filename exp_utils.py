@@ -62,6 +62,38 @@ COLOR_DICT = {
   'tae_uu': (255, 218, 150), 
 }
 
+PNAME_EN_TO_KR = {
+  'go': '고',
+  'go_d': '배고',
+  'hwang': '황',
+  'hwang_dd': '하배황',
+  'hwang_ot': '황',
+  'hwang_u': '청황',
+  'hwang_uu': '중청황',
+  'hwnag_d': '배황',
+  'hyeop': '협',
+  'hyeop_u': '청협',
+  'joong': '중',
+  'joong_d': '배중',
+  'joong_dd': '하배중',
+  'joong_u': '청중',
+  'lim': '임',
+  'lim_d': '배임',
+  'lim_dd': '하배임',
+  'lim_u': '청임',
+  'mu': '무',
+  'mu_d': '배무',
+  'mu_u': '청무',
+  'nam': '남',
+  'nam_d': '배남',
+  'nam_dd': '하배남',
+  'nam_u': '청남',
+  'tae': '태',
+  'tae_d': '배태',
+  'tae_dd': '하배태',
+  'tae_u': '청태',
+}
+
 def get_label(result_dict):
   # result_dict: { row_div: int, rows: list } 
   # rows: [ { col_div: int, cols: [ (tl_x, tl_y, br_x, br_y, pname) ] } ]
@@ -75,8 +107,8 @@ def get_label(result_dict):
       return ''
     
     *_, pname = rows[0]['cols'][0]
-    pname = pname.replace('_ot', '')
-    return result_str + f'{pname}' + ':' + str(5)
+    # pname = pname.replace('_ot', '')
+    return result_str + f'{PNAME_EN_TO_KR[pname]}' + ':' + str(5)
   
   if row_div == 3:
     for row_idx, row in enumerate(rows):
@@ -90,8 +122,8 @@ def get_label(result_dict):
           continue
         
         *_, pname = cols[0]
-        pname = pname.replace('_ot', '')
-        result_str += pname + ':' + str(2 + 3 * row_idx) + ' '
+        # pname = pname.replace('_ot', '')
+        result_str += PNAME_EN_TO_KR[pname] + ':' + str(2 + 3 * row_idx) + ' '
         
       else:
         for col_idx, bbox in enumerate(cols):
@@ -99,8 +131,8 @@ def get_label(result_dict):
             continue
           
           *_, pname = bbox
-          pname = pname.replace('_ot', '')
-          result_str += pname + ':' + str( 1 + (3 * row_idx) + (2 * col_idx) ) + ' '
+          # pname = pname.replace('_ot', '')
+          result_str += PNAME_EN_TO_KR[pname] + ':' + str( 1 + (3 * row_idx) + (2 * col_idx) ) + ' '
     
     return result_str
   
@@ -116,8 +148,8 @@ def get_label(result_dict):
           continue
         
         *_, pname = cols[0]
-        pname = pname.replace('_ot', '')
-        result_str += pname + ':' + str(10 + row_idx) + ' '
+        # pname = pname.replace('_ot', '')
+        result_str += PNAME_EN_TO_KR[pname] + ':' + str(10 + row_idx) + ' '
         
       else:
         for col_idx, bbox in enumerate(cols):
@@ -125,8 +157,8 @@ def get_label(result_dict):
             continue
           
           *_, pname = bbox
-          pname = pname.replace('_ot', '')
-          result_str += pname + ':' + str( 12 + (2*row_idx) + col_idx ) + ' '
+          # pname = pname.replace('_ot', '')
+          result_str += PNAME_EN_TO_KR[pname] + ':' + str( 12 + (2*row_idx) + col_idx ) + ' '
     
     return result_str
   

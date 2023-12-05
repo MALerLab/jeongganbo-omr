@@ -94,76 +94,6 @@ PNAME_EN_TO_KR = {
   'tae_u': '청태',
 }
 
-def get_label(result_dict):
-  # result_dict: { row_div: int, rows: list } 
-  # rows: [ { col_div: int, cols: [ (tl_x, tl_y, br_x, br_y, pname) ] } ]
-  
-  result_str = ''
-  
-  row_div, rows = itemgetter('row_div', 'rows')(result_dict)
-  
-  if row_div == 1:
-    if rows[0] == None or rows[0]['cols'][0] == None:
-      return ''
-    
-    *_, pname = rows[0]['cols'][0]
-    # pname = pname.replace('_ot', '')
-    return result_str + f'{PNAME_EN_TO_KR[pname]}' + ':' + str(5)
-  
-  if row_div == 3:
-    for row_idx, row in enumerate(rows):
-      if row == None:
-        continue
-      
-      col_div, cols = itemgetter('col_div', 'cols')(row)
-      
-      if col_div == 1:
-        if cols[0] == None:
-          continue
-        
-        *_, pname = cols[0]
-        # pname = pname.replace('_ot', '')
-        result_str += PNAME_EN_TO_KR[pname] + ':' + str(2 + 3 * row_idx) + ' '
-        
-      else:
-        for col_idx, bbox in enumerate(cols):
-          if bbox == None:
-            continue
-          
-          *_, pname = bbox
-          # pname = pname.replace('_ot', '')
-          result_str += PNAME_EN_TO_KR[pname] + ':' + str( 1 + (3 * row_idx) + (2 * col_idx) ) + ' '
-    
-    return result_str
-  
-  if row_div == 2:
-    for row_idx, row in enumerate(rows):
-      if row == None:
-        continue
-      
-      col_div, cols = itemgetter('col_div', 'cols')(row)
-      
-      if col_div == 1:
-        if cols[0] == None:
-          continue
-        
-        *_, pname = cols[0]
-        # pname = pname.replace('_ot', '')
-        result_str += PNAME_EN_TO_KR[pname] + ':' + str(10 + row_idx) + ' '
-        
-      else:
-        for col_idx, bbox in enumerate(cols):
-          if bbox == None:
-            continue
-          
-          *_, pname = bbox
-          # pname = pname.replace('_ot', '')
-          result_str += PNAME_EN_TO_KR[pname] + ':' + str( 12 + (2*row_idx) + col_idx ) + ' '
-    
-    return result_str
-  
-  return result_str
-
 class JeongganProcessor:
   def __init__(self, ptrn_size, threshold, mode):
     self.ptrn_size = ptrn_size
@@ -208,7 +138,9 @@ class JeongganProcessor:
         'cols': [ jng_row_group[char_idx] if char_idx != None else char_idx for char_idx in col_indices]
       }
     
-    return jng_aligned_result
+    label_str = self.get_label(jng_aligned_result)
+    
+    return label_str, jng_aligned_result
   
   ## prep img: remove black borders on sides
   @staticmethod
@@ -696,3 +628,69 @@ class JeongganProcessor:
       fit_result_list.append( (fit_result, template_idx + 1, col_matching_result) )
       
     return max(fit_result_list, key=lambda x: x[0])[1:]
+  
+  @staticmethod
+  def get_label(result_dict):
+    # result_dict: { row_div: int, rows: list } 
+    # rows: [ { col_div: int, cols: [ (tl_x, tl_y, br_x, br_y, pname) ] } ]
+    
+    result_str = ''
+    
+    row_div, rows = itemgetter('row_div', 'rows')(result_dict)
+    
+    if row_div == 1:
+      if rows[0] == None or rows[0]['cols'][0] == None:
+        return ''
+      
+      *_, pname = rows[0]['cols'][0]
+      return result_str + f'{PNAME_EN_TO_KR[pname]}' + ':' + str(5)
+    
+    if row_div == 3:
+      for row_idx, row in enumerate(rows):
+        if row == None:
+          continue
+        
+        col_div, cols = itemgetter('col_div', 'cols')(row)
+        
+        if col_div == 1:
+          if cols[0] == None:
+            continue
+          
+          *_, pname = cols[0]
+          result_str += PNAME_EN_TO_KR[pname] + ':' + str(2 + 3 * row_idx) + ' '
+          
+        else:
+          for col_idx, bbox in enumerate(cols):
+            if bbox == None:
+              continue
+            
+            *_, pname = bbox
+            result_str += PNAME_EN_TO_KR[pname] + ':' + str( 1 + (3 * row_idx) + (2 * col_idx) ) + ' '
+      
+      return result_str
+    
+    if row_div == 2:
+      for row_idx, row in enumerate(rows):
+        if row == None:
+          continue
+        
+        col_div, cols = itemgetter('col_div', 'cols')(row)
+        
+        if col_div == 1:
+          if cols[0] == None:
+            continue
+          
+          *_, pname = cols[0]
+          result_str += PNAME_EN_TO_KR[pname] + ':' + str(10 + row_idx) + ' '
+          
+        else:
+          for col_idx, bbox in enumerate(cols):
+            if bbox == None:
+              continue
+            
+            *_, pname = bbox
+            result_str += PNAME_EN_TO_KR[pname] + ':' + str( 12 + (2*row_idx) + col_idx ) + ' '
+      
+      return result_str
+    
+    return result_str

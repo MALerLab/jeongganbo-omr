@@ -2,7 +2,9 @@ notebooks_local/
 
 pdfs/
 pngs/
-test/
+!test/
+test/*
+!test/daegeum/
 
 graphs/
 data/

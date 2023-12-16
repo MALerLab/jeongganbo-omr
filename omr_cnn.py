@@ -10,7 +10,6 @@ import cv2
 import re
 from pathlib import Path
 
-
 class RandomBoundaryDrop:
   def __init__(self, amount=3) -> None:
     self.amount = amount
@@ -33,26 +32,46 @@ class Tokenizer:
     self.vocab = self.get_vocab()
     self.tok2idx = {tok: idx for idx, tok in enumerate(self.vocab)}
 
+  
+  def tokenize_music_notation(self, notation):
+    # Adjust the regex pattern to match:
+    # - single spaces as separate tokens
+    # - hyphens and colon-number pairs
+    # - sequences of non-space, non-colon characters not starting with an underscore
+    # - individual underscores followed by non-space, non-colon characters
+    pattern = r'( +|[^_\s:]+|_+[^_\s:]+|:\d+|[-])'
+
+    # Use re.findall to extract all matching tokens, including spaces
+    tokens = re.findall(pattern, notation)
+    return tokens
+
   def get_vocab(self):
-    vocabs = {'\n', ','}
+    # vocabs = {'\n', ','}
+    vocabs = set()
     for label in self.entire_strs:
-      words = re.split(' |\n', label)
-      words = [word.replace(',', '') for word in words]
-      words = [word for word in words if word != '']
+      # words = re.split(' |\n', label)
+      # words = [word.replace(',', '') for word in words]
+      # words = [word for word in words if word != '']
+      # vocabs.update(words)
+      words = self.tokenize_music_notation(label)
       vocabs.update(words)
     list_vocabs = sorted(list(vocabs))
     return ['<pad>', '<start>', '<end>'] + list_vocabs
 
   def __call__(self, label):
-    label = label.replace('\n', ' \n ')
-    label = label.replace(',', ' , ')
-    words = label.split(' ')
-    words = [word for word in words if word != '']
+    # label = label.replace('\n', ' \n ')
+    # label = label.replace(',', ' , ')
+    # words = label.split(' ')
+    # words = [word for word in words if word != '']
+    words = self.tokenize_music_notation(label)
     words = ['<start>'] + words + ['<end>']
     return [self.tok2idx[word] for word in words]
   
+  def __add__(self, other):
+    return Tokenizer(self.entire_strs + other.entire_strs)
+
   def decode(self, labels):
-    return ' '.join([self.vocab[idx] for idx in labels])
+    return ''.join([self.vocab[idx] for idx in labels])
 
 class Dataset:
   def __init__(self, csv_path, img_dir) -> None:
@@ -63,21 +82,23 @@ class Dataset:
     transforms.ToTensor(),
     transforms.Grayscale(num_output_channels=1),
     transforms.Lambda(lambda x: 1-x),
-    # transforms.Resize((160, 140)),
+    transforms.Resize((160, 140)),
     ])
-    self.tokenizer = Tokenizer(self.df['Annotations'].values.tolist())
+    self.tokenizer = self._make_tokenizer()
 
+  def _make_tokenizer(self):
+    return Tokenizer(self.df['label'].values.tolist())
+  
   def __len__(self):
     return len(self.df)
   
   def __getitem__(self, idx):
     row = self.df.iloc[idx]
-    img = cv2.imread( str(self.img_dir / row['Filename']))
-    annotations = row['Annotations']
+    img = cv2.imread( str(self.img_dir / row['filename']))
+    annotations = row['label']
     img = self.transform(img)
     return img, self.tokenizer(annotations)
   
-
 def pad_collate(raw_batch):
   # raw batch is a list of tuples (img, annotation)
   # img is torch tensor with shape (1, H, W)
@@ -101,8 +122,9 @@ def pad_collate(raw_batch):
   for i, (_, label) in enumerate(raw_batch):
     label_batch[i, :len(label)] = torch.tensor(label)
   
-
   return img_batch, label_batch[:, :-1], label_batch[:, 1:]
+
+
 
 class ConvBlock(nn.Module):
   def __init__(self, in_channels, out_channels, kernel_size, stride, padding):
@@ -165,20 +187,25 @@ class OMRModel(nn.Module):
     self.layers = nn.Sequential(
           ConvBlock(1, hidden_size//4, 3, 1, 1),
           nn.MaxPool2d(2, 2),
+          nn.Dropout(0.2),
           ConvBlock(hidden_size//4, hidden_size//4, 3, 1, 1),
           nn.MaxPool2d(2, 2),
+          nn.Dropout(0.2),
           ConvBlock(hidden_size//4, hidden_size//2, 3, 1, 1),
           nn.MaxPool2d(2, 2),
+          nn.Dropout(0.2),
           ConvBlock(hidden_size//2, hidden_size//2, 3, 1, 1),
           nn.MaxPool2d(2, 2),
+          nn.Dropout(0.2),
           ConvBlock(hidden_size//2, hidden_size, 3, 1, 1),
           nn.MaxPool2d(2, 2),
+          nn.Dropout(0.2),
           ConvBlock(hidden_size, hidden_size, 3, 1, 1),
     )
     
     self.context_attention = ContextAttention(hidden_size, 4)
     self.cont2hidden = nn.Linear(hidden_size, hidden_size*num_gru_layers)
-    self.cnn_gru = nn.GRU(hidden_size, hidden_size//2, 1, batch_first=True, dropout = 0.2, bidirectional=True)
+    self.cnn_gru = nn.GRU(hidden_size, hidden_size//2, 2, batch_first=True, bidirectional=True, dropout=0.2)
 
     self.kv = nn.Linear(hidden_size, hidden_size*2)
     self.q = nn.Linear(hidden_size, hidden_size)
@@ -203,7 +230,7 @@ class OMRModel(nn.Module):
 
     context_vector = self.context_attention(x)
     context_vector = self.cont2hidden(context_vector.relu())
-    context_vector = context_vector.reshape(x.shape[0], -1, context_vector.shape[-1]//2).permute(1,0,2)
+    context_vector = context_vector.reshape(x.shape[0], self.gru.num_layers, -1).permute(1,0,2)
     context_vector = context_vector.contiguous()
 
     return x, context_vector
@@ -384,3 +411,38 @@ def get_nll_loss(predicted_prob_distribution, indices_of_correct_token, eps=1e-1
   filtered_prob = prob_of_correct_next_word[indices_of_correct_token != ignore_index]
   loss = -filtered_prob
   return loss.mean()
+
+
+def main():
+  dataset = Dataset('labels_from_ls.csv', 'jeongganbo-png/unique-char-pngs/')
+  pre_dataset = Dataset('cv_label.csv', 'jeongganbo-png/splited-pngs/')
+
+  tokenizer = dataset.tokenizer + pre_dataset.tokenizer
+  pre_dataset.tokenizer = tokenizer
+  dataset.tokenizer = tokenizer
+
+  model = OMRModel(128, vocab_size=len(dataset.tokenizer.vocab), num_gru_layers=2)
+  optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+
+  # train_set, valid_set, test_set = torch.utils.data.random_split(dataset, 
+  #                                                               [int(len(dataset)*0.8), 
+  #                                                                 int(len(dataset)*0.1), 
+  #                                                                 len(dataset) - int(len(dataset)*0.8)  - int(len(dataset)*0.1)] )
+  train_set, valid_set= torch.utils.data.random_split(dataset, [int(len(dataset)*0.9), 
+                                                                  len(dataset) - int(len(dataset)*0.9)] )
+
+  pre_train_loader = DataLoader(pre_dataset, batch_size=256, shuffle=True, collate_fn=pad_collate)
+  train_loader = DataLoader(train_set, batch_size=64, shuffle=True, collate_fn=pad_collate)
+  valid_loader = DataLoader(valid_set, batch_size=32, shuffle=False, collate_fn=pad_collate)
+  # test_loader = DataLoader(test_set, batch_size=32, shuffle=False, collate_fn=pad_collate)
+
+  trainer = Trainer(model, optimizer, get_nll_loss, pre_train_loader, valid_loader, 'cuda')
+  trainer.train_by_num_epoch(2)
+
+  trainer = Trainer(model, optimizer, get_nll_loss, train_loader, valid_loader, 'cuda')
+  trainer.train_by_num_epoch(100)
+
+
+if __name__ == "__main__":
+
+  main()

@@ -321,6 +321,13 @@ class JeongganboReader:
   
 
 
+class NoteSymbol:
+  def __init__(self) -> None:
+    self.pitch = None
+    self.beat_in_jeonggan = None
+
+  def __repr__(self) -> str:
+    return f"NoteSymbol at {self.beat_in_jeonggan}, pitch: {self.pitch}"
 
 class Jeonggan:
   def __init__(self, img, x, y, w, h) -> None:
@@ -339,13 +346,19 @@ class Jeonggan:
     self.piece_beat = None
 
     self.is_double = self.h > JG_MAX_HEIGHT
+    self.notes = None
 
     # assert self.w < JG_MAX_WIDTH and self.w > JG_MIN_WIDTH, f"Jeonggan width is not in range: {self.w}"
     # assert self.h < JG_MAX_HEIGHT and self.h > JG_MIN_HEIGHT, f"Jeonggan height is not in range: {self.h}"
 
+  def _parse_notes(self) -> List[NoteSymbol]:
+
+    return
+
   def __repr__(self) -> str:
     return f"Jeonggan at Gak {self.gak_id}, Daegang {self.daegang_id}, Beat {self.beat}, Piece Beat {self.piece_beat}, img ({self.x}, {self.y})"
   
+
 
 class Gak:
   def __init__(self, jeonggans: List[Jeonggan], row_id: int) -> None:

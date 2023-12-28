@@ -27,10 +27,15 @@ class RandomBoundaryDrop:
       return img[boundary_amount:, :]
 
 class Tokenizer:
-  def __init__(self, entire_strs) -> None:
-    self.entire_strs = entire_strs
-    self.vocab = self.get_vocab()
-    self.tok2idx = {tok: idx for idx, tok in enumerate(self.vocab)}
+  def __init__(self, entire_strs=None, vocab_txt_fn=None) -> None:
+    if vocab_txt_fn:
+      with open(vocab_txt_fn, 'r') as f:
+        self.vocab = [line for line in f.read().split('\n')]
+      self.tok2idx = {tok: idx for idx, tok in enumerate(self.vocab)}
+    else:
+      self.entire_strs = entire_strs
+      self.vocab = self.get_vocab()
+      self.tok2idx = {tok: idx for idx, tok in enumerate(self.vocab)}
 
   
   def tokenize_music_notation(self, notation):
@@ -74,16 +79,26 @@ class Tokenizer:
     return ''.join([self.vocab[idx] for idx in labels])
 
 class Dataset:
-  def __init__(self, csv_path, img_dir) -> None:
+  def __init__(self, csv_path, img_dir, is_valid=False) -> None:
     self.df = pd.read_csv(csv_path)
     self.img_dir = Path(img_dir)
-    self.transform = transforms.Compose([
-    RandomBoundaryDrop(4),
-    transforms.ToTensor(),
-    transforms.Grayscale(num_output_channels=1),
-    transforms.Lambda(lambda x: 1-x),
-    transforms.Resize((160, 140)),
-    ])
+    self.is_valid = is_valid
+
+    if self.is_valid:
+      self.transform = transforms.Compose([
+      transforms.ToTensor(),
+      transforms.Grayscale(num_output_channels=1),
+      transforms.Lambda(lambda x: 1-x),
+      transforms.Resize((160, 140)),
+      ])
+    else:
+      self.transform = transforms.Compose([
+      RandomBoundaryDrop(4),
+      transforms.ToTensor(),
+      transforms.Grayscale(num_output_channels=1),
+      transforms.Lambda(lambda x: 1-x),
+      transforms.RandomResizedCrop((160, 140), scale=(0.85, 1,0)),
+      ])
     self.tokenizer = self._make_tokenizer()
 
   def _make_tokenizer(self):
@@ -187,25 +202,20 @@ class OMRModel(nn.Module):
     self.layers = nn.Sequential(
           ConvBlock(1, hidden_size//4, 3, 1, 1),
           nn.MaxPool2d(2, 2),
-          nn.Dropout(0.2),
           ConvBlock(hidden_size//4, hidden_size//4, 3, 1, 1),
           nn.MaxPool2d(2, 2),
-          nn.Dropout(0.2),
           ConvBlock(hidden_size//4, hidden_size//2, 3, 1, 1),
           nn.MaxPool2d(2, 2),
-          nn.Dropout(0.2),
           ConvBlock(hidden_size//2, hidden_size//2, 3, 1, 1),
           nn.MaxPool2d(2, 2),
-          nn.Dropout(0.2),
           ConvBlock(hidden_size//2, hidden_size, 3, 1, 1),
           nn.MaxPool2d(2, 2),
-          nn.Dropout(0.2),
           ConvBlock(hidden_size, hidden_size, 3, 1, 1),
     )
     
     self.context_attention = ContextAttention(hidden_size, 4)
     self.cont2hidden = nn.Linear(hidden_size, hidden_size*num_gru_layers)
-    self.cnn_gru = nn.GRU(hidden_size, hidden_size//2, 2, batch_first=True, bidirectional=True, dropout=0.2)
+    self.cnn_gru = nn.GRU(hidden_size, hidden_size//2, 1, batch_first=True, dropout = 0.2, bidirectional=True)
 
     self.kv = nn.Linear(hidden_size, hidden_size*2)
     self.q = nn.Linear(hidden_size, hidden_size)
@@ -219,6 +229,7 @@ class OMRModel(nn.Module):
         nn.Linear(hidden_size * 4, hidden_size),
     )
 
+    self.final_gru = nn.GRU(hidden_size * 2, hidden_size*2, 1, batch_first=True)
     self.proj = nn.Linear(hidden_size*2, vocab_size)
 
   def run_img_cnn(self, x):
@@ -230,7 +241,7 @@ class OMRModel(nn.Module):
 
     context_vector = self.context_attention(x)
     context_vector = self.cont2hidden(context_vector.relu())
-    context_vector = context_vector.reshape(x.shape[0], self.gru.num_layers, -1).permute(1,0,2)
+    context_vector = context_vector.reshape(x.shape[0], -1, context_vector.shape[-1]//2).permute(1,0,2)
     context_vector = context_vector.contiguous()
 
     return x, context_vector
@@ -250,6 +261,7 @@ class OMRModel(nn.Module):
     attention = self.mlp(attention)
 
     cat_out = torch.cat([gru_out, attention], dim=-1)
+    cat_out, _ = self.final_gru(cat_out)
     logit = self.proj(cat_out)
 
     return logit
@@ -264,6 +276,7 @@ class OMRModel(nn.Module):
 
     y = torch.ones((1, 1), dtype=torch.long).to(x.device)
     outputs = []
+    final_gru_last_hidden = None
     for _ in range(100):
       y = self.emb(y)
       gru_out, last_hidden = self.gru(y, last_hidden)
@@ -275,12 +288,40 @@ class OMRModel(nn.Module):
       attention = self.mlp(attention)
 
       cat_out = torch.cat([gru_out, attention], dim=-1)
+      cat_out, final_gru_last_hidden = self.final_gru(cat_out, final_gru_last_hidden)        
+
       logit = self.proj(cat_out)
       y = torch.argmax(logit, dim=-1)
       if y == 2:
         break
       outputs.append(y.item())
     return outputs
+
+  
+
+class Inferencer:
+  def __init__(self, vocab_txt_fn='tokenizer.txt', model_weights='omr_model_best.pt'):
+    self.tokenizer = Tokenizer(vocab_txt_fn=vocab_txt_fn)
+    self.model = OMRModel(80, vocab_size=len(self.tokenizer.vocab), num_gru_layers=2)
+    self.model.load_state_dict(torch.load(model_weights, map_location='cpu')['model'])
+    self.model.eval()
+    self.transform = transforms.Compose(
+      [transforms.ToTensor(),
+      transforms.Grayscale(num_output_channels=1),
+      transforms.Lambda(lambda x: 1-x),
+      transforms.Resize((160, 140)),
+      ])
+  
+  def __call__(self, img):
+    if isinstance(img, str) or isinstance(img, Path):
+      img = cv2.imread(img)
+    img = self.transform(img)
+    img = img.unsqueeze(0)
+    pred = self.model.inference(img)
+    pred = self.tokenizer.decode(pred)
+    return pred
+  
+
 class Trainer:
   def __init__(self, model, optimizer, loss_fn, train_loader, valid_loader, device, model_name='nmt_model'):
     self.model = model
@@ -413,34 +454,40 @@ def get_nll_loss(predicted_prob_distribution, indices_of_correct_token, eps=1e-1
   return loss.mean()
 
 
+
 def main():
-  dataset = Dataset('labels_from_ls.csv', 'jeongganbo-png/unique-char-pngs/')
+  dataset = Dataset('labels_from_ls.csv', 'jeongganbo-png/splited-pngs/')
   pre_dataset = Dataset('cv_label.csv', 'jeongganbo-png/splited-pngs/')
 
   tokenizer = dataset.tokenizer + pre_dataset.tokenizer
   pre_dataset.tokenizer = tokenizer
   dataset.tokenizer = tokenizer
 
-  model = OMRModel(128, vocab_size=len(dataset.tokenizer.vocab), num_gru_layers=2)
+  with open('tokenizer.txt', 'w') as f:
+    f.write('\n'.join(tokenizer.vocab))
+
+  model = OMRModel(80, vocab_size=len(dataset.tokenizer.vocab), num_gru_layers=2)
   optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
   # train_set, valid_set, test_set = torch.utils.data.random_split(dataset, 
   #                                                               [int(len(dataset)*0.8), 
   #                                                                 int(len(dataset)*0.1), 
   #                                                                 len(dataset) - int(len(dataset)*0.8)  - int(len(dataset)*0.1)] )
-  train_set, valid_set= torch.utils.data.random_split(dataset, [int(len(dataset)*0.9), 
-                                                                  len(dataset) - int(len(dataset)*0.9)] )
+  # train_set, valid_set= torch.utils.data.random_split(dataset, [int(len(dataset)*0.99), 
+  #                                                                 len(dataset) - int(len(dataset)*0.99)] )
+  train_set = dataset
+  valid_set = dataset
 
   pre_train_loader = DataLoader(pre_dataset, batch_size=256, shuffle=True, collate_fn=pad_collate)
   train_loader = DataLoader(train_set, batch_size=64, shuffle=True, collate_fn=pad_collate)
-  valid_loader = DataLoader(valid_set, batch_size=32, shuffle=False, collate_fn=pad_collate)
+  valid_loader = DataLoader(valid_set, batch_size=512, shuffle=False, collate_fn=pad_collate)
   # test_loader = DataLoader(test_set, batch_size=32, shuffle=False, collate_fn=pad_collate)
 
   trainer = Trainer(model, optimizer, get_nll_loss, pre_train_loader, valid_loader, 'cuda')
-  trainer.train_by_num_epoch(2)
+  trainer.train_by_num_epoch(1)
 
   trainer = Trainer(model, optimizer, get_nll_loss, train_loader, valid_loader, 'cuda')
-  trainer.train_by_num_epoch(100)
+  trainer.train_by_num_epoch(80)
 
 
 if __name__ == "__main__":

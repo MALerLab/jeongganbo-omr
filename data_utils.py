@@ -3,7 +3,8 @@ import numpy as np
 from typing import List, Dict, Tuple
 from collections import Counter, defaultdict
 from pathlib import Path
-
+from omr_cnn import Inferencer
+import torch
 
 
 JG_MIN_AREA = 8000
@@ -27,7 +28,7 @@ PAGE_HEIGHT = 3091
 
 
 class JeongganboReader:
-  def __init__(self) -> None:
+  def __init__(self, run_omr=False) -> None:
     
     self.line_min_length = 70
     self.line_min_thickness = 2
@@ -41,6 +42,10 @@ class JeongganboReader:
     self.final_kernel = np.ones((2, 2), np.uint8)
 
     self.closing_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (25,25))
+
+    self.run_omr = run_omr
+    if self.run_omr:
+      self.omr = Inferencer()
 
   def _repair_v_lines(self, img_bin_v: np.ndarray, img_bin_h:np.ndarray) -> np.ndarray:
     # img_bin_v = cv2.morphologyEx(img_bin, cv2.MORPH_OPEN, self.kernel_v)
@@ -83,10 +88,6 @@ class JeongganboReader:
         img_bin_v[y:y+h, x:x+w] = 0
     return img_bin_v, h_contours
   
-  def _repair_h_lines(self, img_bin_h: np.ndarray) -> np.ndarray:
-
-    return
-
 
   def _get_boxes(self, img_bin: np.ndarray) -> np.ndarray:
     img_bin_h = cv2.morphologyEx(img_bin, cv2.MORPH_OPEN, self.kernel_h)
@@ -251,7 +252,11 @@ class JeongganboReader:
         jeonggan_boxes = np.delete(jeonggan_boxes, box_index, axis=0)
     return jeonggan_boxes
 
-
+  def run_omr_on_page(self, page):
+    # page: Page object
+    for jeonggan in page.jeonggan_list:
+      jeonggan_img = jeonggan.img
+      jeonggan.omr_text = self.omr(jeonggan_img)
 
   def __call__(self, image, return_title_detected=False):
     if isinstance(image, str):
@@ -281,9 +286,12 @@ class JeongganboReader:
     thick_boxes = self.adjust_box_position(thick_boxes)
 
     jeonggan_boxes = self.filter_blank_jeonggan_after_double_line(jeonggan_boxes, thin_h_contours, image)
+    page = Page(image, jeonggan_boxes, thick_boxes, h_contours, title_box)
+    if self.run_omr:
+      self.run_omr_on_page(page)
     if return_title_detected:
-      return Page(image, jeonggan_boxes, thick_boxes, h_contours, title_box), title_box_detected
-    return Page(image, jeonggan_boxes, thick_boxes, h_contours, title_box)
+      return page, title_box_detected
+    return page
   
   def parse_multiple_pages(self, image_paths:List[str], min_jeonggan_count=4):
     pieces = []
@@ -347,6 +355,7 @@ class Jeonggan:
 
     self.is_double = self.h > JG_MAX_HEIGHT
     self.notes = None
+    self.omr_text = None
 
     # assert self.w < JG_MAX_WIDTH and self.w > JG_MIN_WIDTH, f"Jeonggan width is not in range: {self.w}"
     # assert self.h < JG_MAX_HEIGHT and self.h > JG_MIN_HEIGHT, f"Jeonggan height is not in range: {self.h}"

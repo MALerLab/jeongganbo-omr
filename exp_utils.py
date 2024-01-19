@@ -79,7 +79,7 @@ PNAME_EN_TO_KR = {
   'hwang_ot': '황',
   'hwang_u': '청황',
   'hwang_uu': '중청황',
-  'hwnag_d': '배황',
+  'hwang_d': '배황',
   'hyeop': '협',
   'hyeop_u': '청협',
   'joong': '중',
@@ -101,6 +101,7 @@ PNAME_EN_TO_KR = {
   'tae_d': '배태',
   'tae_dd': '하배태',
   'tae_u': '청태',
+  'conti': '-'
 }
 
 class JeongganProcessor:

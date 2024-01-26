@@ -1,7 +1,13 @@
-# Welcome to Jeonggan CV branch
+# Welcome to Jeonggan Synthesizer branch
 
-## done refactoring
-**now, JeongganProcessor class can produce dict containing list of  note position, note name, note bbox for each Jeonggan image**
+## Jeonggan Synthesizer
+* generate a image of a single Jeonggan containing random contents
 
-* check JeongganProcessor class in /exp_utils.py
-* pipeline example in notebooks/jeonggan_process_pipline.ipynb
+## TODOs
+[ ] aligning images in the box (both columns and rows)
+
+[ ] character and mark resizing part
+
+[ ] add ornaments with durations
+
+[ ] add ornaments with no durations

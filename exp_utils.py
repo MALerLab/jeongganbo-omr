@@ -1,8 +1,11 @@
 import math
 from random import randint, choice
 from operator import itemgetter
+import re
+
 import cv2
 import numpy as np
+
 
 # only for experiment purpose
 def make_jeonggan_generator(reader, jngb):
@@ -114,6 +117,48 @@ PNAME_EN_TO_KR = {
   'pause': '쉼표'
 }
 
+PNAME_KR_TO_EN = {
+  '하배이': 'ee_dd',
+  '이': 'ee',
+  '배응': 'eung_d',
+  '응': 'eung',
+  '배고': 'go_d',
+  '고': 'go',
+  '청고': 'go_u',
+  '하배황': 'hwang_dd',
+  '배황': 'hwang_d',
+  '황': 'hwang',
+  '청황': 'hwang_u',
+  '중청황': 'hwang_uu',
+  '하배협': 'hyeop_dd',
+  '배협': 'hyeop_d',
+  '협': 'hyeop',
+  '청협': 'hyeop_u',
+  '하배중': 'joong_dd',
+  '배중': 'joong_d',
+  '중': 'joong',
+  '청중': 'joong_u',
+  '하하배임': 'lim_ddd',
+  '하배임': 'lim_dd',
+  '배임': 'lim_d',
+  '임': 'lim',
+  '청임': 'lim_u',
+  '하배무': 'mu_dd',
+  '배무': 'mu_d',
+  '무': 'mu',
+  '청무': 'mu_u',
+  '하배남': 'nam_dd',
+  '배남': 'nam_d',
+  '남': 'nam',
+  '청남': 'nam_u',
+  '하배태': 'tae_dd',
+  '배태': 'tae_d',
+  '태': 'tae',
+  '청태': 'tae_u',
+  '-': 'conti',
+  '쉼표': 'pause',
+}
+
 class JeongganProcessor:
   def __init__(self, ptrn_size, threshold, mode):
     self.ptrn_size = ptrn_size
@@ -158,7 +203,19 @@ class JeongganProcessor:
         'cols': [ jng_row_group[char_idx] if char_idx != None else char_idx for char_idx in col_indices]
       }
     
-    label_str = self.get_label(jng_aligned_result)
+    jng_aligned_result_format = jng_aligned_result
+    
+    for row_idx, row in enumerate(jng_aligned_result_format['rows']):
+      if not row:
+        continue
+      
+      for col_idx, col in enumerate(row['cols']):
+        if not col:
+          continue
+        
+        jng_aligned_result_format['rows'][row_idx]['cols'][col_idx] = col[-1]
+    
+    label_str = self.get_label(jng_aligned_result_format)
     
     return label_str, jng_aligned_result
   
@@ -652,7 +709,7 @@ class JeongganProcessor:
   @staticmethod
   def get_label(result_dict):
     # result_dict: { row_div: int, rows: list } 
-    # rows: [ { col_div: int, cols: [ (tl_x, tl_y, br_x, br_y, pname) ] } ]
+    # rows: [ { col_div: int, cols: [ pname ] } ]
     
     result_str = ''
     
@@ -662,7 +719,7 @@ class JeongganProcessor:
       if rows[0] == None or rows[0]['cols'][0] == None:
         return ''
       
-      *_, pname = rows[0]['cols'][0]
+      pname = rows[0]['cols'][0]
       return result_str + f'{PNAME_EN_TO_KR[pname]}' + ':' + str(5)
     
     if row_div == 3:
@@ -672,22 +729,18 @@ class JeongganProcessor:
         
         col_div, cols = itemgetter('col_div', 'cols')(row)
         
-        if col_div == 1:
-          if cols[0] == None:
-            continue
-          
-          *_, pname = cols[0]
+        if col_div == 1 and cols[0]:
+          pname = cols[0]
           result_str += PNAME_EN_TO_KR[pname] + ':' + str(2 + 3 * row_idx) + ' '
           
         else:
-          for col_idx, bbox in enumerate(cols):
-            if bbox == None:
+          for col_idx, pname in enumerate(cols):
+            if pname == None:
               continue
             
-            *_, pname = bbox
             result_str += PNAME_EN_TO_KR[pname] + ':' + str( 1 + (3 * row_idx) + (2 * col_idx) ) + ' '
       
-      return result_str
+      return result_str.strip()
     
     if row_div == 2:
       for row_idx, row in enumerate(rows):
@@ -696,25 +749,80 @@ class JeongganProcessor:
         
         col_div, cols = itemgetter('col_div', 'cols')(row)
         
-        if col_div == 1:
-          if cols[0] == None:
-            continue
+        if col_div == 1 and cols[0]:
           
-          *_, pname = cols[0]
+          pname = cols[0]
           result_str += PNAME_EN_TO_KR[pname] + ':' + str(10 + row_idx) + ' '
           
         else:
-          for col_idx, bbox in enumerate(cols):
-            if bbox == None:
+          for col_idx, pname in enumerate(cols):
+            if pname == None:
               continue
             
-            *_, pname = bbox
             result_str += PNAME_EN_TO_KR[pname] + ':' + str( 12 + (2*row_idx) + col_idx ) + ' '
       
-      return result_str
+      return result_str.strip()
     
-    return result_str
+    return result_str.strip()
+  
+  @classmethod
+  def label2dict(cls, label: str):
+    pattern = r'([^_\s:]+|_+[^_\s:]+|[^:]\d+|[-])'
+    
+    notes = label.split()
+    
+    token_groups = []
+    
+    for note in notes:
+      findings = re.findall(pattern, note)
+      token_groups.append( findings )
+    
+    row_div = cls.get_row_div( list( map(lambda g: int(g[-1]), token_groups) ) )
+    rows = [ { 'col_div': 0, 'cols': [] } for _ in range(row_div) ]
+    
+    for group in token_groups:
+      pname, *_, pos  = group
+      row_idx = cls.pos2colIdx(pos, row_div)
+      
+      rows[row_idx]['col_div'] += 1
+      rows[row_idx]['cols'].append( PNAME_KR_TO_EN[pname] )
+    
+    return {
+      'row_div': row_div,
+      'rows': rows
+    }
+  
+  @staticmethod
+  def get_row_div(poses):
+    row_div = 0
+    
+    if len(poses) == 1 and poses[0] == 5:
+      row_div = 1
+      
+    elif sum([ 1 if pos >= 10 else 0 for pos in poses ]) == len(poses):
+      row_div = 2
 
+    else:
+      row_div = 3
+    
+    return row_div
+  
+  @staticmethod
+  def pos2colIdx(pos, row_div):
+    pos = int(pos)
+    
+    if row_div == 1:
+      return 0
+    
+    elif row_div == 3:
+      return (pos - 1) // row_div
+    
+    else:
+      if pos < 12:
+        return (pos - 10)
+      else:
+        return (pos - 12) // row_div
+    
 
 INIT_WIDTH = 100
 WIDTH_NOISE_SIG = 3.34
@@ -761,16 +869,11 @@ class JeongganSynthesizer:
   
   # label generator
   @classmethod
-  def get_label_dict(cls, img_aspect_ratio = 1.0):
+  def get_label_dict(cls, img_aspect_ratio = 1.0, div=None):
     pitch_range = cls.get_pitch_range()
-    jng_dict = cls.get_jng_dict( pitch_range, div=( 2 if img_aspect_ratio < 1.0 else None ) )
+    jng_dict = cls.get_jng_dict( pitch_range, div=( 2 if img_aspect_ratio < 1.0 else div ) )
     
-    jng_dict_format = {
-      'row_div': jng_dict['row_div'],
-      'rows': [ { 'col_div': row['col_div'], 'cols': [ (0, 0, 0, 0, col) for col in row['cols'] ]} for row in jng_dict['rows'] ]
-    }
-    
-    label = JeongganProcessor.get_label(jng_dict_format)
+    label = JeongganProcessor.get_label(jng_dict)
     
     return jng_dict, label
     

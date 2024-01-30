@@ -4,13 +4,15 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-opencv-python = "4.8.1"
+opencv-python = "*"
 pdfplumber = "0.10.2"
 numpy = "1.24.4"
 matplotlib = "*"
 pandas = "*"
 tqdm = "*"
 opencv-contrib-python = "*"
+label-studio-sdk = "*"
+easyocr = "*"
 
 [dev-packages]
 ipykernel = "*"

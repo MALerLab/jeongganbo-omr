@@ -1,4 +1,5 @@
 import math
+from random import randint, choice
 from operator import itemgetter
 import cv2
 import numpy as np
@@ -713,3 +714,251 @@ class JeongganProcessor:
       return result_str
     
     return result_str
+
+
+INIT_WIDTH = 100
+WIDTH_NOISE_SIG = 3.34
+WIDTH_NOISE_MIN = -10
+WIDTH_NOISE_MAX = 13
+
+INIT_RATIO = 1.4
+RATIO_NOISE_SIG = 0.3
+RATIO_NOISE_MIN = -0.7
+RATIO_NOISE_MAX = 1.0
+
+MARK_HEIGHT = 27
+MARK_WIDTHS = {
+  'conti': 21,
+  'pause': 27
+}
+
+OCTAVE_WIDTH = 10
+OCTAVE_RANGE = 6
+
+# PITCH_ORDER: 'hwang', 'dae', 'tae', 'hyeop', 'go', 'joong', 'yoo', 'lim', 'ee', 'nam', 'mu', 'eung'
+PITCH_ORDER = [
+                                                        'lim_ddd', None,     None,       None,     None,
+  'hwang_dd', 'tae_dd', 'hyeop_dd',  None,   'joong_dd', 'lim_dd',  'ee_dd',  'nam_dd',   'mu_dd',  None,
+  'hwang_d',  'tae_d',  'hyeop_d',  'go_d',  'joong_d',  'lim_d',   None,     'nam_d',    'mu_d',   'eung_d',
+  'hwang',    'tae',    'hyeop',    'go',    'joong',    'lim',     'ee',     'nam',      'mu',     'eung',
+  'hwang_u',  'tae_u',  'hyeop_u',  'go_u',  'joong_u',  'lim_u',   None,     'nam_u',    'mu_u',   None,
+  'hwang_uu'
+]
+
+class JeongganSynthesizer:
+  def __init__(self, img_path_dict):
+    self.img_path_dict = img_path_dict
+  
+  def __call__(self):
+    img_w, img_h = self.get_size()
+    img = self.get_blank(img_w, img_h)
+    
+    jng_dict, label = self.get_label_dict(img_aspect_ratio = img_h/img_w)
+    
+    jng_img = self.generate_image_by_dict(img, jng_dict)
+    
+    return label, jng_img
+  
+  # label generator
+  @classmethod
+  def get_label_dict(cls, img_aspect_ratio = 1.0):
+    pitch_range = cls.get_pitch_range()
+    jng_dict = cls.get_jng_dict( pitch_range, div=( 2 if img_aspect_ratio < 1.0 else None ) )
+    
+    jng_dict_format = {
+      'row_div': jng_dict['row_div'],
+      'rows': [ { 'col_div': row['col_div'], 'cols': [ (0, 0, 0, 0, col) for col in row['cols'] ]} for row in jng_dict['rows'] ]
+    }
+    
+    label = JeongganProcessor.get_label(jng_dict_format)
+    
+    return jng_dict, label
+    
+  @staticmethod
+  def get_pitch_range(): # len 5 ~ 8
+    num_pitch = len(PITCH_ORDER)
+    
+    center = randint(0, num_pitch)
+    offset = bool(randint(0, 1)) # True: center is octave_width//2 / False: center is octave_width//2 + 1
+    
+    min_idx = 4 if offset else 5
+    max_idx = 5 if offset else 4
+    
+    res = []
+    
+    if center < min_idx:
+      res = PITCH_ORDER[:OCTAVE_WIDTH]
+      
+    elif center > num_pitch - max_idx:
+      res = PITCH_ORDER[num_pitch-OCTAVE_WIDTH:]
+    
+    else:
+      res = PITCH_ORDER[center-min_idx:center+max_idx]
+    
+    return list(filter(None, res))
+
+  @staticmethod
+  def get_jng_dict(plist, div=None):
+    plist = ['conti', 'pause'] + plist
+    
+    row_div = div if div else randint(1, 3)
+    
+    res = {
+      'row_div': row_div,
+      'rows': []
+    }
+    
+    for _ in range(row_div):
+      col_div = randint(1, 2) if row_div > 1 else 1
+      cols = []
+      
+      for _ in range(col_div):
+        cur = choice(plist)
+        
+        cols.append(cur)
+      
+      res['rows'].append({
+        'col_div': col_div,
+        'cols': cols
+      })
+    
+    return res
+  
+  # image generation
+  def generate_image_by_dict(self, img, dict):
+    img_h, img_w = img.shape[:2]
+    
+    row_div = dict['row_div']
+    
+    note_height = 40 if row_div == 1 else 36
+    
+    row_heights = []
+    for row in dict['rows']:
+      if row['col_div'] == 1 and row['cols'][0] == 'conti':
+        row_heights.append(MARK_HEIGHT)
+        continue
+      
+      row_heights.append(note_height)
+
+    gap = (img_h - sum(row_heights)) // (row_div + 1)
+
+    row_template = [ gap + idx * (row_heights[idx - 1 if idx > 0 else idx] + gap) for idx in range(row_div) ]
+
+    for row_idx, row in enumerate(dict['rows']):
+      col_div = row['col_div']
+      
+      notes = [] 
+      for note_name in row['cols']:
+        note_img_path = self.img_path_dict[note_name]
+        
+        if isinstance(note_img_path, list):
+          note_img_path = choice(note_img_path)
+        
+        note_img = cv2.imread(note_img_path, cv2.IMREAD_UNCHANGED)
+        
+        if note_name in ('conti', 'pause'):
+          note_img = self.make_mark(note_img, note_name)
+        else:
+          note_img = self.resize_img_by_height(note_img, note_height)
+        
+        note_img = self.remove_background(note_img)
+        
+        notes.append((note_img, note_name))
+      
+      gap = ( img_w - sum( [ note[0].shape[1] for note in notes ] ) ) // (col_div + 1)
+      col_template = [ gap + idx * (notes[idx - 1 if idx > 0 else idx][0].shape[1] + gap) for idx in range(col_div) ] if col_div > 1 else [ round(img_w / 2) - round(notes[0][0].shape[1] / 2) ]
+      
+      for col_idx, note_tuple in enumerate(notes):
+        note, note_name = note_tuple
+        
+        pos_x = col_template[col_idx]
+        pos_y = row_template[row_idx]
+        
+        if note_name in ('conti', 'pause'):
+          pos_y += (note_height - note.shape[0]) // 2
+      
+        img = self.insert_img(img, note, pos_x, pos_y)
+    
+    return img
+  
+  @staticmethod
+  def clamp(val, _min, _max):
+    return min(_max, max(_min, val))
+
+  @classmethod
+  def get_width(cls):
+    noise = cls.clamp( round(np.random.normal(0, WIDTH_NOISE_SIG)), WIDTH_NOISE_MIN, WIDTH_NOISE_MAX )
+    return INIT_WIDTH + noise
+
+  @classmethod
+  def get_ratio(cls): 
+    noise = round( cls.clamp( np.random.normal(0, RATIO_NOISE_SIG), RATIO_NOISE_MIN, RATIO_NOISE_MAX ), 1 )
+    return INIT_RATIO + noise 
+
+  @classmethod
+  def get_size(cls):
+    width = cls.get_width()
+    ratio = cls.get_ratio()
+    
+    return width, round(width * ratio)
+  
+  @staticmethod
+  def remove_background(img, crop=True):
+    img = cv2.cvtColor(img, cv2.COLOR_RGB2RGBA)
+    
+    img_grey = cv2.cvtColor(img, cv2.COLOR_RGBA2GRAY)
+    
+    y, x = np.where(img_grey > 250)
+    
+    img_cp = img.copy()
+    
+    img_cp[y, x] = np.full(4, 0, dtype=np.uint8)
+    
+    return img_cp
+
+  @staticmethod
+  def get_blank(width, height, bg='white'):
+    blank = np.zeros((height, width, 4), dtype=np.uint8)
+    
+    if bg == 'white':
+      blank[:, :] = np.array([255, 255, 255, 255], dtype=np.uint8)
+    elif bg == 'black':
+      blank[:, :] = np.array([0, 0, 0, 255], dtype=np.uint8)
+    
+    return blank
+  
+  @staticmethod
+  def insert_img(src, insert, x, y):
+    h, w = insert.shape[:2]
+
+    # normalize alpha to 0 ~ 1
+    src_alpha = src[y:y+h, x:x+w, 3] / 255.0
+    ins_alpha = insert[:, :, 3] / 255.0
+
+    # blend src and insert channel by channel
+    for ch in range(0, 3):
+      src[y:y+h, x:x+w, ch] = ins_alpha * insert[:, :, ch] + \
+                              src_alpha * src[y:y+h, x:x+w, ch] * (1 - ins_alpha)
+
+    # denoramlize alpha to 0 ~ 255
+    src[y:y+h, x:x+w, 3] = (1 - (1 - ins_alpha) * (1 - src_alpha)) * 255
+    
+    return src
+
+  @staticmethod
+  def resize_img_by_height(img, target_height):
+    og_h, og_w = img.shape[:2]
+    
+    resize_ratio = target_height / og_h
+    resize_width = round(og_w * resize_ratio)
+    
+    return cv2.resize(img, dsize=(resize_width, target_height), interpolation=None)
+  
+  @classmethod
+  def make_mark(cls, img, name):
+    width = MARK_WIDTHS[name]
+    img_rs = cv2.resize(img, dsize=( width, round(img.shape[0]/img.shape[1] * width) ))
+    
+    bg = cls.get_blank(width, MARK_HEIGHT)
+    
+    return cls.insert_img(bg, img_rs, 0, MARK_HEIGHT//2 - img_rs.shape[0]//2)

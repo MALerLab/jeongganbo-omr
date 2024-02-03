@@ -867,11 +867,21 @@ class JeongganSynthesizer:
     
     return label, jng_img
   
+  def generate_single_data(self):
+    img_w, img_h = self.get_size()
+    img = self.get_blank(img_w, img_h)
+    
+    jng_dict, label = self.get_label_dict(img_aspect_ratio = img_h/img_w)
+    
+    jng_img = self.generate_image_by_dict(img, jng_dict)
+    
+    return label, img_w, img_h
+  
   # label generator
   @classmethod
   def get_label_dict(cls, img_aspect_ratio = 1.0, div=None):
     pitch_range = cls.get_pitch_range()
-    jng_dict = cls.get_jng_dict( pitch_range, div=( 2 if img_aspect_ratio < 1.0 else div ) )
+    jng_dict = cls.get_jng_dict( pitch_range, div=( div if img_aspect_ratio >= 1.0 else randint(1, 2) ) )
     
     label = JeongganProcessor.get_label(jng_dict)
     
@@ -928,6 +938,15 @@ class JeongganSynthesizer:
     return res
   
   # image generation
+  def generate_image_by_label(self, label, width, height):
+    jng_dict = JeongganProcessor.label2dict(label)
+    
+    img = self.get_blank(width, height)
+    
+    jng_img = self.generate_image_by_dict(img, jng_dict)
+    
+    return jng_img
+    
   def generate_image_by_dict(self, img, dict):
     img_h, img_w = img.shape[:2]
     
@@ -994,14 +1013,15 @@ class JeongganSynthesizer:
     return INIT_WIDTH + noise
 
   @classmethod
-  def get_ratio(cls): 
-    noise = round( cls.clamp( np.random.normal(0, RATIO_NOISE_SIG), RATIO_NOISE_MIN, RATIO_NOISE_MAX ), 1 )
+  def get_ratio(cls, min_ratio=None): 
+    min_noise = (min_ratio - INIT_RATIO) if min_ratio else RATIO_NOISE_MIN
+    noise = round( cls.clamp( np.random.normal(0, RATIO_NOISE_SIG), min_noise, RATIO_NOISE_MAX ), 1 )
     return INIT_RATIO + noise 
 
   @classmethod
-  def get_size(cls):
+  def get_size(cls, min_ratio=None):
     width = cls.get_width()
-    ratio = cls.get_ratio()
+    ratio = cls.get_ratio( min_ratio=min_ratio ) 
     
     return width, round(width * ratio)
   

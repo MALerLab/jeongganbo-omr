@@ -9,6 +9,7 @@ test/*
 
 graphs/
 data/
+model/
 
 wandb/
 

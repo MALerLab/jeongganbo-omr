@@ -1,14 +1,18 @@
-import torch
-import torch.nn as nn
 import random
+import re
+from pathlib import Path
+from operator import itemgetter
 
-from torch.utils.data import DataLoader
-from torchvision import transforms
 from tqdm.auto import tqdm
 import pandas as pd
 import cv2
-import re
-from pathlib import Path
+
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+from torchvision import transforms
+
+from exp_utils import JeongganSynthesizer
 
 class RandomBoundaryDrop:
   def __init__(self, amount=3) -> None:
@@ -79,9 +83,10 @@ class Tokenizer:
     return ''.join([self.vocab[idx] for idx in labels])
 
 class Dataset:
-  def __init__(self, csv_path, img_dir, is_valid=False) -> None:
+  def __init__(self, csv_path, img_path_dict, is_valid=False) -> None:
     self.df = pd.read_csv(csv_path)
-    self.img_dir = Path(img_dir)
+    self.img_path_dict = img_path_dict
+    self.jng_synth = JeongganSynthesizer(img_path_dict)
     self.is_valid = is_valid
 
     if self.is_valid:
@@ -109,11 +114,12 @@ class Dataset:
   
   def __getitem__(self, idx):
     row = self.df.iloc[idx]
-    img = cv2.imread( str(self.img_dir / row['filename']))
-    annotations = row['label']
+    annotations, width, height = itemgetter('label', 'width', 'height')(row)
+    img = self.jng_synth.generate_image_by_label(annotations, width, height)
+    img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
     img = self.transform(img)
     return img, self.tokenizer(annotations)
-  
+    
 def pad_collate(raw_batch):
   # raw batch is a list of tuples (img, annotation)
   # img is torch tensor with shape (1, H, W)
@@ -138,8 +144,6 @@ def pad_collate(raw_batch):
     label_batch[i, :len(label)] = torch.tensor(label)
   
   return img_batch, label_batch[:, :-1], label_batch[:, 1:]
-
-
 
 class ConvBlock(nn.Module):
   def __init__(self, in_channels, out_channels, kernel_size, stride, padding):
@@ -323,7 +327,7 @@ class Inferencer:
   
 
 class Trainer:
-  def __init__(self, model, optimizer, loss_fn, train_loader, valid_loader, device, model_name='nmt_model'):
+  def __init__(self, model, optimizer, loss_fn, train_loader, valid_loader, device, model_name='nmt_model', model_save_path='model'):
     self.model = model
     self.optimizer = optimizer
     self.loss_fn = loss_fn
@@ -340,29 +344,36 @@ class Trainer:
     self.validation_loss = []
     self.validation_acc = []
     self.model_name = model_name
+    self.model_save_path = Path(model_save_path)
 
   def save_model(self, path):
-    torch.save({'model':self.model.state_dict(), 'optim':self.optimizer.state_dict()}, path)
+    torch.save({'model':self.model.state_dict(), 'optim':self.optimizer.state_dict()}, self.model_save_path / path)
+  
+  def save_loss_acc(self, loss_acc_dict, path):
+    torch.save(loss_acc_dict, self.model_save_path / path)
     
-  def train_by_num_epoch(self, num_epochs):
-    for epoch in tqdm(range(num_epochs)):
+  def train_and_validate(self):
+    for b_idx, batch in enumerate(tqdm(self.train_loader, leave=False)):
       self.model.train()
-      for batch in tqdm(self.train_loader, leave=False):
-        loss_value = self._train_by_single_batch(batch)
-        self.training_loss.append(loss_value)
-      self.model.eval()
-      validation_loss, validation_acc = self.validate()
-      self.validation_loss.append(validation_loss)
-      self.validation_acc.append(validation_acc)
+      loss_value = self._train_by_single_batch(batch)
+      self.training_loss.append(loss_value)
       
-      if validation_acc > self.best_valid_accuracy:
-        print(f"Saving the model with best validation accuracy: Epoch {epoch+1}, Acc: {validation_acc:.4f} ")
-        self.save_model(f'{self.model_name}_best.pt')
-      else:
-        self.save_model(f'{self.model_name}_last.pt')
-      self.best_valid_accuracy = max(validation_acc, self.best_valid_accuracy)
-
-      
+      if (b_idx+1) % 100 == 0:  
+        self.model.eval()
+        validation_loss, validation_acc = self.validate()
+        self.validation_loss.append(validation_loss)
+        self.validation_acc.append(validation_acc)
+    
+        if validation_acc > self.best_valid_accuracy:
+          print(f"Saving the model with best validation accuracy: valid #{(b_idx+1) // 100}, Acc: {validation_acc:.4f} ")
+          self.save_model(f'{self.model_name}_best.pt')
+        else:
+          self.save_model(f'{self.model_name}_last.pt')
+          
+        self.best_valid_accuracy = max(validation_acc, self.best_valid_accuracy)
+  
+    self.save_loss_acc({ 'train_loss': self.training_loss, 'valid_loss': self.validation_loss, 'valid_acc': self.validation_acc}, f'{self.model_name}_loss_acc.pt')
+  
   def _train_by_single_batch(self, batch):
     '''
     This method updates self.model's parameter with a given batch
@@ -410,7 +421,7 @@ class Trainer:
       print('An arbitrary loader is used instead of Validation loader')
     else:
       loader = self.valid_loader
-      
+    
     self.model.eval()
     
     '''
@@ -453,42 +464,56 @@ def get_nll_loss(predicted_prob_distribution, indices_of_correct_token, eps=1e-1
   loss = -filtered_prob
   return loss.mean()
 
+def get_img_paths(img_path_base):
+  if isinstance(img_path_base, str):
+    img_path_base = Path(img_path_base)
+    
+  img_ext = '.png'
 
+  raw_dict = {
+    str(path).split('/')[-1].replace('.png', ''): str(path) \
+    for path in img_path_base.glob(f'*.png')
+  }
+
+  res_dict = {}
+
+  for name, path in sorted(raw_dict.items(), key=lambda x: x[0]):
+    name = re.sub(r'(_\d\d\d)|(_ot)', '', name)
+    
+    if res_dict.get(name, False):
+      res_dict[name].append(path)
+    else:
+      res_dict[name] = [path]
+
+  for name, paths in res_dict.items():
+    if len(paths) < 2:
+      res_dict[name] = paths[0]
+
+  return res_dict
 
 def main():
-  dataset = Dataset('labels_from_ls.csv', 'jeongganbo-png/splited-pngs/')
-  pre_dataset = Dataset('cv_label.csv', 'jeongganbo-png/splited-pngs/')
+  model_name = 'synth_only_240204_001'
+  note_img_path_dict = get_img_paths('test/synth/src/notes')
+  
+  train_set = Dataset('data/train/001_1706859356.csv', note_img_path_dict)
+  valid_set = Dataset('data/valid/001_1706861315.csv', note_img_path_dict, is_valid=True)
 
-  tokenizer = dataset.tokenizer + pre_dataset.tokenizer
-  pre_dataset.tokenizer = tokenizer
-  dataset.tokenizer = tokenizer
+  tokenizer = train_set.tokenizer + valid_set.tokenizer
+  train_set.tokenizer = tokenizer
+  valid_set.tokenizer = tokenizer
 
-  with open('tokenizer.txt', 'w') as f:
+  with open('data/001_tokenizer.txt', 'w') as f:
     f.write('\n'.join(tokenizer.vocab))
 
-  model = OMRModel(80, vocab_size=len(dataset.tokenizer.vocab), num_gru_layers=2)
+  model = OMRModel(80, vocab_size=len(tokenizer.vocab), num_gru_layers=2)
   optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
-  # train_set, valid_set, test_set = torch.utils.data.random_split(dataset, 
-  #                                                               [int(len(dataset)*0.8), 
-  #                                                                 int(len(dataset)*0.1), 
-  #                                                                 len(dataset) - int(len(dataset)*0.8)  - int(len(dataset)*0.1)] )
-  # train_set, valid_set= torch.utils.data.random_split(dataset, [int(len(dataset)*0.99), 
-  #                                                                 len(dataset) - int(len(dataset)*0.99)] )
-  train_set = dataset
-  valid_set = dataset
+  train_loader = DataLoader(train_set, batch_size=100, shuffle=True, collate_fn=pad_collate)
+  valid_loader = DataLoader(valid_set, batch_size=100, shuffle=False, collate_fn=pad_collate)
 
-  pre_train_loader = DataLoader(pre_dataset, batch_size=256, shuffle=True, collate_fn=pad_collate)
-  train_loader = DataLoader(train_set, batch_size=64, shuffle=True, collate_fn=pad_collate)
-  valid_loader = DataLoader(valid_set, batch_size=512, shuffle=False, collate_fn=pad_collate)
-  # test_loader = DataLoader(test_set, batch_size=32, shuffle=False, collate_fn=pad_collate)
-
-  trainer = Trainer(model, optimizer, get_nll_loss, pre_train_loader, valid_loader, 'cuda')
-  trainer.train_by_num_epoch(1)
-
-  trainer = Trainer(model, optimizer, get_nll_loss, train_loader, valid_loader, 'cuda')
-  trainer.train_by_num_epoch(80)
-
+  trainer = Trainer(model, optimizer, get_nll_loss, train_loader, valid_loader, 'cuda', model_name=model_name, model_save_path='model')
+  
+  trainer.train_and_validate()
 
 if __name__ == "__main__":
 

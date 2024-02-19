@@ -467,8 +467,6 @@ def get_nll_loss(predicted_prob_distribution, indices_of_correct_token, eps=1e-1
 def get_img_paths(img_path_base):
   if isinstance(img_path_base, str):
     img_path_base = Path(img_path_base)
-    
-  img_ext = '.png'
 
   raw_dict = {
     str(path).split('/')[-1].replace('.png', ''): str(path) \

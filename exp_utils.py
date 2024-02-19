@@ -1,5 +1,5 @@
 import math
-from random import randint, choice
+from random import randint, choice, uniform
 from operator import itemgetter
 import re
 
@@ -834,6 +834,8 @@ RATIO_NOISE_SIG = 0.3
 RATIO_NOISE_MIN = -0.7
 RATIO_NOISE_MAX = 1.0
 
+DEFAULT_MARGIN = 6
+
 MARK_HEIGHT = 26
 MARK_WIDTHS = {
   'conti': 21,
@@ -860,8 +862,8 @@ class JeongganSynthesizer:
   def __call__(self):
     img_w, img_h = self.get_size()
     img = self.get_blank(img_w, img_h)
-    
-    jng_dict, label = self.get_label_dict(img_aspect_ratio = img_h/img_w)
+    # jng_dict, label = self.get_label_dict(img_aspect_ratio = img_h/img_w)
+    jng_dict, label = self.get_label_dict()
     
     jng_img = self.generate_image_by_dict(img, jng_dict)
     
@@ -885,7 +887,7 @@ class JeongganSynthesizer:
     if not range_limit:
       pitch_range = list(filter(None, PITCH_ORDER))
     
-    jng_dict = cls.get_jng_dict( pitch_range, div=( div if img_aspect_ratio >= 1.0 else randint(1, 2) ) )
+    jng_dict = cls.get_jng_dict( pitch_range )
     
     label = JeongganProcessor.get_label(jng_dict)
     
@@ -944,59 +946,148 @@ class JeongganSynthesizer:
     
     return jng_img
     
-  def generate_image_by_dict(self, img, dict):
+  def generate_image_by_dict(self, img, dict, apply_noise=True):
     img_h, img_w = img.shape[:2]
     
-    row_div = dict['row_div']
-    
-    note_height = 40 if row_div == 1 else 36
-    
+    jng_arr = [ row['cols'] for row in dict['rows'] ]
+    row_div = len(jng_arr)
+
+    jng_infos = []
     row_heights = []
-    for row in dict['rows']:
-      if row['col_div'] == 1 and row['cols'][0] == 'conti':
-        row_heights.append(MARK_HEIGHT)
-        continue
+
+    for row_idx, row in enumerate(jng_arr):
+      new_row = []
+      row_height = []
       
-      row_heights.append(note_height)
-
-    gap = (img_h - sum(row_heights)) // (row_div + 1)
-
-    row_template = [ gap + idx * (row_heights[idx - 1 if idx > 0 else idx] + gap) for idx in range(row_div) ]
-
-    for row_idx, row in enumerate(dict['rows']):
-      col_div = row['col_div']
-      
-      notes = [] 
-      for note_name in row['cols']:
+      for note_name in row:
         note_img_path = self.img_path_dict[note_name]
         
         if isinstance(note_img_path, list):
           note_img_path = choice(note_img_path)
         
         note_img = cv2.imread(note_img_path, cv2.IMREAD_UNCHANGED)
+        note_img_dim = list(note_img.shape[:2])
         
-        if note_name in ('conti', 'pause'):
-          note_img = self.make_mark(note_img, note_name)
+        if note_name == 'conti' and len(row) == 1:
+          note_img_dim[0] = MARK_HEIGHT
+        
+        new_row.append( [note_name, note_img_dim, note_img] )
+        row_height.append(note_img_dim[0])
+      
+      jng_infos.append(new_row)
+      row_heights.append(max(row_height))
+
+    row_margin = randint(1, DEFAULT_MARGIN)
+    
+    if sum(row_heights) > img_h - 2*row_margin:
+      ignore = []
+      valid = []
+      
+      for rh in row_heights:
+        if rh < 10:
+          ignore.append(rh)
         else:
-          note_img = self.resize_img_by_height(note_img, note_height)
+          valid.append(rh * 1.2)
+      
+      h_size_ratio = (img_h - 2*row_margin - sum(ignore))/sum(valid)
+      
+      new_jng_infos = []
+      new_row_heights = []
+      
+      for row in jng_infos:
+        new_row = []
+        new_row_height = []
         
-        note_img = self.remove_background(note_img)
+        for col in row:
+          note_name, note_img_dim, note_img = col
+          
+          if note_img_dim[0] > 9:
+            note_img_dim[0] = int(note_img_dim[0] * h_size_ratio)
+          
+          if note_name == 'pause':
+            note_img_dim[1] = int(note_img_dim[1] * h_size_ratio)
+          
+          new_row.append([note_name, note_img_dim, note_img])
+          new_row_height.append(note_img_dim[0])
+        
+        new_jng_infos.append(new_row)
+        new_row_heights.append(max(new_row_height))
+      
+      jng_infos = new_jng_infos
+      row_heights = new_row_heights
+      
+      del new_jng_infos
+      del new_row_heights
+
+    row_gap = int((img_h - 2*row_margin - sum(row_heights)) / (row_div + 1))
+    row_template = [ row_margin + sum(row_heights[:idx]) + (idx + 1) * row_gap for idx in range(row_div) ]
+
+    col_margin = randint(0, DEFAULT_MARGIN)
+    
+    for row_idx, row in enumerate(jng_infos):
+      col_div = len(row)
+      
+      if sum([ img_dim[1] for _, img_dim, _ in row ]) > img_w - 2*row_margin:
+        ignore = []
+        valid = []
+        
+        for note_name, note_img_dim, _ in row:
+          if note_name == 'conti':
+            ignore.append(note_img_dim[1])
+          else:
+            valid.append(note_img_dim[1] * 1.2)
+        
+        w_size_ratio = (img_w - 2*col_margin - sum(ignore))/sum(valid)
+        
+        new_row = []
+        
+        for note_name, note_img_dim, note_img in row:
+          if note_name != 'conti':
+            note_img_dim[1] = int(note_img_dim[1] * w_size_ratio)
+          
+          if note_name == 'pause':
+            note_img_dim[0] = int(note_img_dim[0] * w_size_ratio)
+          
+          new_row.append([note_name, note_img_dim, note_img])
+        
+        row = new_row
+        del new_row
+      
+      notes = [] 
+      for note_name, note_img_dim, note_img in row:
+        if any([tar != src for tar, src in zip(note_img_dim, note_img.shape[:2])]):
+          if note_name == 'conti':
+            note_img = self.make_mark(note_img, note_img_dim[0])
+          else:
+            note_img = cv2.resize(note_img, dsize=note_img_dim[-1::-1])
         
         notes.append((note_img, note_name))
       
-      gap = ( img_w - sum( [ note[0].shape[1] for note in notes ] ) ) // (col_div + 1)
-      col_template = [ gap + idx * (notes[idx - 1 if idx > 0 else idx][0].shape[1] + gap) for idx in range(col_div) ] if col_div > 1 else [ round(img_w / 2) - round(notes[0][0].shape[1] / 2) ]
+      row_width = sum([ img.shape[1] for img, _ in notes ])
+      col_gap = (img_w - 2*col_margin - row_width) // (col_div + 1)
+      col_template = [ col_margin + sum([ img.shape[1] for img, _ in notes ][:idx]) + (idx + 1) * col_gap for idx in range(col_div) ]
       
       for col_idx, note_tuple in enumerate(notes):
-        note, note_name = note_tuple
+        note_img, note_name = note_tuple
+        
+        # size noise
+        if apply_noise:
+          rand_ratio = uniform(0.8, 1.1)
+          note_img = self.resize_img_by_height(note_img, round(note_img.shape[0] * rand_ratio))
         
         pos_x = col_template[col_idx]
         pos_y = row_template[row_idx]
         
-        if note_name in ('conti', 'pause'):
-          pos_y += (note_height - note.shape[0]) // 2
+        if row_heights[row_idx] != note_img.shape[0]:
+          pos_y += row_heights[row_idx]//2 - note_img.shape[0]//2
+        
+        if apply_noise:
+          pos_x += randint(-3, 3)
+          pos_y += randint(-3, 3)
       
-        img = self.insert_img(img, note, pos_x, pos_y)
+        note_img = self.remove_background(note_img)
+      
+        img = self.insert_img(img, note_img, pos_x, pos_y)
     
     return img
   

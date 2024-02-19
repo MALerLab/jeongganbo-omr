@@ -834,22 +834,22 @@ RATIO_NOISE_SIG = 0.3
 RATIO_NOISE_MIN = -0.7
 RATIO_NOISE_MAX = 1.0
 
-MARK_HEIGHT = 27
+MARK_HEIGHT = 26
 MARK_WIDTHS = {
   'conti': 21,
-  'pause': 27
+  'pause': 27 # 34
 }
 
-OCTAVE_WIDTH = 10
+OCTAVE_WIDTH = 13
 OCTAVE_RANGE = 6
 
 # PITCH_ORDER: 'hwang', 'dae', 'tae', 'hyeop', 'go', 'joong', 'yoo', 'lim', 'ee', 'nam', 'mu', 'eung'
 PITCH_ORDER = [
-                                                        'lim_ddd', None,     None,       None,     None,
-  'hwang_dd', 'tae_dd', 'hyeop_dd',  None,   'joong_dd', 'lim_dd',  'ee_dd',  'nam_dd',   'mu_dd',  None,
-  'hwang_d',  'tae_d',  'hyeop_d',  'go_d',  'joong_d',  'lim_d',   None,     'nam_d',    'mu_d',   'eung_d',
-  'hwang',    'tae',    'hyeop',    'go',    'joong',    'lim',     'ee',     'nam',      'mu',     'eung',
-  'hwang_u',  'tae_u',  'hyeop_u',  'go_u',  'joong_u',  'lim_u',   None,     'nam_u',    'mu_u',   None,
+                                                                      'lim_ddd',  None,     None,       None,    None,
+  'hwang_dd', None, 'tae_dd', 'hyeop_dd',  None,   'joong_dd', None,  'lim_dd',  'ee_dd',  'nam_dd',   'mu_dd',  None,
+  'hwang_d',  None, 'tae_d',  'hyeop_d',  'go_d',  'joong_d',  None,  'lim_d',   None,     'nam_d',    'mu_d',   'eung_d',
+  'hwang',    None, 'tae',    'hyeop',    'go',    'joong',    None,  'lim',     'ee',     'nam',      'mu',     'eung',
+  'hwang_u',  None, 'tae_u',  'hyeop_u',  'go_u',  'joong_u',  None,  'lim_u',   None,     'nam_u',    'mu_u',   None,
   'hwang_uu'
 ]
 
@@ -867,11 +867,11 @@ class JeongganSynthesizer:
     
     return label, jng_img
   
-  def generate_single_data(self, is_test=False):
+  def generate_single_data(self, range_limit=True):
     img_w, img_h = self.get_size()
     img = self.get_blank(img_w, img_h)
     
-    jng_dict, label = self.get_label_dict(img_aspect_ratio = img_h/img_w, is_test=is_test)
+    jng_dict, label = self.get_label_dict(img_aspect_ratio = img_h/img_w, range_limit=range_limit)
     
     jng_img = self.generate_image_by_dict(img, jng_dict)
     
@@ -879,10 +879,10 @@ class JeongganSynthesizer:
   
   # label generator
   @classmethod
-  def get_label_dict(cls, img_aspect_ratio = 1.0, div=None, is_test=False):
+  def get_label_dict(cls, img_aspect_ratio = 1.0, div=None, range_limit=True):
     pitch_range = cls.get_pitch_range()
     
-    if is_test:
+    if not range_limit:
       pitch_range = list(filter(None, PITCH_ORDER))
     
     jng_dict = cls.get_jng_dict( pitch_range, div=( div if img_aspect_ratio >= 1.0 else randint(1, 2) ) )
@@ -892,25 +892,20 @@ class JeongganSynthesizer:
     return jng_dict, label
     
   @staticmethod
-  def get_pitch_range(): # len 5 ~ 8
+  def get_pitch_range():
     num_pitch = len(PITCH_ORDER)
     
-    center = randint(0, num_pitch)
-    offset = bool(randint(0, 1)) # True: center is octave_width//2 / False: center is octave_width//2 + 1
+    center = randint(0, num_pitch - 1)
+    offset = OCTAVE_WIDTH // 2
     
-    min_idx = 4 if offset else 5
-    max_idx = 5 if offset else 4
-    
-    res = []
-    
-    if center < min_idx:
+    if center < offset:
       res = PITCH_ORDER[:OCTAVE_WIDTH]
       
-    elif center > num_pitch - max_idx:
+    elif center > num_pitch - offset:
       res = PITCH_ORDER[num_pitch-OCTAVE_WIDTH:]
     
     else:
-      res = PITCH_ORDER[center-min_idx:center+max_idx]
+      res = PITCH_ORDER[center-offset:center+offset+1]
     
     return list(filter(None, res))
 
@@ -930,9 +925,7 @@ class JeongganSynthesizer:
       cols = []
       
       for _ in range(col_div):
-        cur = choice(plist)
-        
-        cols.append(cur)
+        cols.append( choice(plist) )
       
       res['rows'].append({
         'col_div': col_div,
@@ -1057,18 +1050,33 @@ class JeongganSynthesizer:
   @staticmethod
   def insert_img(src, insert, x, y):
     h, w = insert.shape[:2]
-
+    
+    x = abs(x)
+    y = abs(y)
+    
+    x_end = min(src.shape[1], x+w) # clamp
+    y_end = min(src.shape[0], y+h) # clamp
+    
+    # print(x, y, w, h, x_end, y_end, src.shape[1::-1])
+    # print(src[y:y+h, x:x+w].shape, src[y:y_end, x:x_end].shape)
+    # print()
+    
+    x_crop = min(src.shape[1]-x, insert.shape[1])
+    y_crop = min(src.shape[0]-y, insert.shape[0])
+    
+    insert = insert[:y_crop, :x_crop]
+    
     # normalize alpha to 0 ~ 1
-    src_alpha = src[y:y+h, x:x+w, 3] / 255.0
+    src_alpha = src[y:y_end, x:x_end, 3] / 255.0
     ins_alpha = insert[:, :, 3] / 255.0
 
     # blend src and insert channel by channel
     for ch in range(0, 3):
-      src[y:y+h, x:x+w, ch] = ins_alpha * insert[:, :, ch] + \
-                              src_alpha * src[y:y+h, x:x+w, ch] * (1 - ins_alpha)
+      src[y:y_end, x:x_end, ch] = ins_alpha * insert[:, :, ch] + \
+                                  src_alpha * src[y:y_end, x:x_end, ch] * (1 - ins_alpha)
 
     # denoramlize alpha to 0 ~ 255
-    src[y:y+h, x:x+w, 3] = (1 - (1 - ins_alpha) * (1 - src_alpha)) * 255
+    src[y:y_end, x:x_end, 3] = (1 - (1 - ins_alpha) * (1 - src_alpha)) * 255
     
     return src
 
@@ -1082,10 +1090,7 @@ class JeongganSynthesizer:
     return cv2.resize(img, dsize=(resize_width, target_height), interpolation=None)
   
   @classmethod
-  def make_mark(cls, img, name):
-    width = MARK_WIDTHS[name]
-    img_rs = cv2.resize(img, dsize=( width, round(img.shape[0]/img.shape[1] * width) ))
+  def make_mark(cls, img, height):
+    bg = cls.get_blank(img.shape[1], height)
     
-    bg = cls.get_blank(width, MARK_HEIGHT)
-    
-    return cls.insert_img(bg, img_rs, 0, MARK_HEIGHT//2 - img_rs.shape[0]//2)
+    return cls.insert_img(bg, img, 0, MARK_HEIGHT//2 - img.shape[0]//2)

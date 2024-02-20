@@ -2,10 +2,14 @@ import random
 import re
 from pathlib import Path
 from operator import itemgetter
+import csv
 
 from tqdm.auto import tqdm
 import pandas as pd
 import cv2
+import numpy as np
+
+import wandb
 
 import torch
 import torch.nn as nn
@@ -115,7 +119,15 @@ class Dataset:
   def __getitem__(self, idx):
     row = self.df.iloc[idx]
     annotations, width, height = itemgetter('label', 'width', 'height')(row)
-    img = self.jng_synth.generate_image_by_label(annotations, width, height)
+    img = None
+    
+    while True:
+      try:
+        img = self.jng_synth.generate_image_by_label(annotations, width, height)
+        break
+      except:
+        pass
+    
     img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
     img = self.transform(img)
     return img, self.tokenizer(annotations)
@@ -166,7 +178,7 @@ class ContextAttention(nn.Module):
     self.num_head = num_head
 
     if size % num_head != 0:
-        raise ValueError("size must be dividable by num_head", size, num_head)
+      raise ValueError("size must be dividable by num_head", size, num_head)
     self.head_size = int(size/num_head)
     self.context_vector = torch.nn.Parameter(torch.Tensor(num_head, self.head_size, 1))
     nn.init.uniform_(self.context_vector, a=-1, b=1)
@@ -199,41 +211,63 @@ class ContextAttention(nn.Module):
     sum_attention = torch.sum(attention, dim=1)
     return sum_attention
 
+
+class QKVAttention(nn.Module):
+  def __init__(self, hidden_size, num_head=4, dropout=0.1):
+    super().__init__()
+    
+    self.kv = nn.Linear(hidden_size, hidden_size*2)
+    self.q = nn.Linear(hidden_size, hidden_size)
+    self.num_head = num_head
+    self.mlp = nn.Sequential(
+      nn.Linear(hidden_size, hidden_size * 4),
+      nn.GELU(),
+      nn.Dropout(dropout),
+      nn.Linear(hidden_size * 4, hidden_size),
+    )    
+    
+  def forward(self, _q, _kv):
+    kv = self.kv(_kv)
+    k, v = torch.split(kv, kv.shape[-1]//2, dim=-1)
+    q = self.q(_q)
+    attention_score = torch.bmm(q, k.permute(0,2,1))
+    attention_score = torch.softmax(attention_score, dim=-1)
+    attention = torch.bmm(attention_score, v)
+    attention = self.mlp(attention)
+    
+    return attention
+  
+
 class OMRModel(nn.Module):
   def __init__(self, hidden_size, vocab_size, num_gru_layers=2):
     super().__init__()
 
     self.layers = nn.Sequential(
-          ConvBlock(1, hidden_size//4, 3, 1, 1),
-          nn.MaxPool2d(2, 2),
-          ConvBlock(hidden_size//4, hidden_size//4, 3, 1, 1),
-          nn.MaxPool2d(2, 2),
-          ConvBlock(hidden_size//4, hidden_size//2, 3, 1, 1),
-          nn.MaxPool2d(2, 2),
-          ConvBlock(hidden_size//2, hidden_size//2, 3, 1, 1),
-          nn.MaxPool2d(2, 2),
-          ConvBlock(hidden_size//2, hidden_size, 3, 1, 1),
-          nn.MaxPool2d(2, 2),
-          ConvBlock(hidden_size, hidden_size, 3, 1, 1),
+      ConvBlock(1, hidden_size//4, 3, 1, 1),
+      nn.MaxPool2d(2, 2),
+      ConvBlock(hidden_size//4, hidden_size//4, 3, 1, 1),
+      nn.MaxPool2d(2, 2),
+      ConvBlock(hidden_size//4, hidden_size//2, 3, 1, 1),
+      nn.MaxPool2d(2, 2),
+      ConvBlock(hidden_size//2, hidden_size//2, 3, 1, 1),
+      nn.MaxPool2d(2, 2),
+      ConvBlock(hidden_size//2, hidden_size, 3, 1, 1),
+      nn.MaxPool2d(2, 2),
+      ConvBlock(hidden_size, hidden_size, 3, 1, 1),
     )
     
     self.context_attention = ContextAttention(hidden_size, 4)
     self.cont2hidden = nn.Linear(hidden_size, hidden_size*num_gru_layers)
     self.cnn_gru = nn.GRU(hidden_size, hidden_size//2, 1, batch_first=True, dropout = 0.2, bidirectional=True)
 
-    self.kv = nn.Linear(hidden_size, hidden_size*2)
-    self.q = nn.Linear(hidden_size, hidden_size)
-    self.num_head = 4
-
     self.emb = nn.Embedding(vocab_size, hidden_size)
     self.gru = nn.GRU(hidden_size, hidden_size, num_gru_layers, batch_first=True, dropout = 0.2)
-    self.mlp = nn.Sequential(
-        nn.Linear(hidden_size, hidden_size * 4),
-        nn.GELU(),
-        nn.Linear(hidden_size * 4, hidden_size),
-    )
 
-    self.final_gru = nn.GRU(hidden_size * 2, hidden_size*2, 1, batch_first=True)
+    self.attn_layer1 = QKVAttention(hidden_size)
+    self.attn_layer2 = QKVAttention(hidden_size)
+
+    self.final_gru1 = nn.GRU(hidden_size * 2, hidden_size, 1, batch_first=True)
+    self.final_gru2 = nn.GRU(hidden_size * 2, hidden_size*2, 1, batch_first=True)
     self.proj = nn.Linear(hidden_size*2, vocab_size)
 
   def run_img_cnn(self, x):
@@ -250,58 +284,65 @@ class OMRModel(nn.Module):
 
     return x, context_vector
 
-  
   def forward(self, x, y):
     x, context_vector = self.run_img_cnn(x)
     y = self.emb(y)
     gru_out, _ = self.gru(y, context_vector)
-    kv = self.kv(x)
-    k, v = torch.split(kv, kv.shape[-1]//2, dim=-1)
-    q = self.q(gru_out)
-    attention_score = torch.bmm(q, k.permute(0,2,1))
-    attention_score = torch.softmax(attention_score, dim=-1)
 
-    attention = torch.bmm(attention_score, v)
-    attention = self.mlp(attention)
+    attention = self.attn_layer1(gru_out, x)
 
     cat_out = torch.cat([gru_out, attention], dim=-1)
-    cat_out, _ = self.final_gru(cat_out)
+
+    cat_out, _ = self.final_gru1(cat_out)
+    
+    attention = self.attn_layer2(cat_out, x)
+    cat_out = torch.cat([cat_out, attention], dim=-1)
+    cat_out, _ = self.final_gru2(cat_out)
+    
     logit = self.proj(cat_out)
 
     return logit
 
   @torch.inference_mode()  
-  def inference(self, x):
-    assert x.shape[0] == 1 # batch size must be 1
+  def inference(self, x, max_len=None, batch=True):
+    # assert x.shape[0] == 1 # batch size must be 1
 
     x, last_hidden = self.run_img_cnn(x)
-    kv = self.kv(x)
-    k, v = torch.split(kv, kv.shape[-1]//2, dim=-1)
-
-    y = torch.ones((1, 1), dtype=torch.long).to(x.device)
-    outputs = []
-    final_gru_last_hidden = None
-    for _ in range(100):
+    
+    y = torch.ones((x.shape[0], 1), dtype=torch.long).to(x.device)
+    outputs = torch.ones_like(y) if batch else []
+    
+    final_gru_last_hidden1 = None
+    final_gru_last_hidden2 = None
+    
+    max_len = max_len if max_len else 100
+    
+    for _ in range(max_len):
       y = self.emb(y)
       gru_out, last_hidden = self.gru(y, last_hidden)
-      q = self.q(gru_out)
-      attention_score = torch.bmm(q, k.permute(0,2,1))
-      attention_score = torch.softmax(attention_score, dim=-1)
-
-      attention = torch.bmm(attention_score, v)
-      attention = self.mlp(attention)
-
+      
+      attention = self.attn_layer1(gru_out, x)
+      
       cat_out = torch.cat([gru_out, attention], dim=-1)
-      cat_out, final_gru_last_hidden = self.final_gru(cat_out, final_gru_last_hidden)        
+      
+      cat_out, final_gru_last_hidden1 = self.final_gru1(cat_out, final_gru_last_hidden1)        
+      
+      attention = self.attn_layer2(cat_out, x)
+      cat_out = torch.cat([cat_out, attention], dim=-1)
+      cat_out, final_gru_last_hidden2 = self.final_gru2(cat_out, final_gru_last_hidden2)
 
       logit = self.proj(cat_out)
       y = torch.argmax(logit, dim=-1)
-      if y == 2:
-        break
-      outputs.append(y.item())
+      
+      if batch:
+        outputs = torch.cat([outputs, y], dim=1) 
+      else:
+        if y.item() == 2:
+          break
+        outputs.append(y.item())
+    
     return outputs
 
-  
 
 class Inferencer:
   def __init__(self, vocab_txt_fn='tokenizer.txt', model_weights='omr_model_best.pt'):
@@ -321,18 +362,20 @@ class Inferencer:
       img = cv2.imread(img)
     img = self.transform(img)
     img = img.unsqueeze(0)
-    pred = self.model.inference(img)
+    pred = self.model.inference(img, batch=False)
     pred = self.tokenizer.decode(pred)
     return pred
   
 
 class Trainer:
-  def __init__(self, model, optimizer, loss_fn, train_loader, valid_loader, device, model_name='nmt_model', model_save_path='model'):
+  def __init__(self, model, optimizer, loss_fn, train_loader, valid_loader, tokenizer, device, wandb=None, model_name='nmt_model', model_save_path='model'):
     self.model = model
     self.optimizer = optimizer
     self.loss_fn = loss_fn
     self.train_loader = train_loader
     self.valid_loader = valid_loader
+    self.tokenizer = tokenizer
+    self.wandb = wandb
     
     self.model.to(device)
     
@@ -358,10 +401,18 @@ class Trainer:
       loss_value = self._train_by_single_batch(batch)
       self.training_loss.append(loss_value)
       
+      if self.wandb:
+        self.wandb.log(
+          {
+            'loss_train': loss_value
+          },
+          step=b_idx
+        )
+      
       if (b_idx+1) % 100 == 0:  
         self.model.eval()
-        validation_loss, validation_acc = self.validate()
-        self.validation_loss.append(validation_loss)
+        validation_loss, validation_acc, metric_dict = self.validate()
+        #self.validation_loss.append(validation_loss)
         self.validation_acc.append(validation_acc)
     
         if validation_acc > self.best_valid_accuracy:
@@ -371,6 +422,12 @@ class Trainer:
           self.save_model(f'{self.model_name}_last.pt')
           
         self.best_valid_accuracy = max(validation_acc, self.best_valid_accuracy)
+        
+        # metric_dict['valid_loss'] = validation_loss
+        metric_dict['valid_acc'] = validation_acc
+        
+        if self.wandb:
+          self.wandb.log(metric_dict, step=b_idx)
   
     self.save_loss_acc({ 'train_loss': self.training_loss, 'valid_loss': self.validation_loss, 'valid_acc': self.validation_acc}, f'{self.model_name}_loss_acc.pt')
   
@@ -434,17 +491,99 @@ class Trainer:
       for batch in tqdm(loader, leave=False):
         
         src, tgt_i, tgt_o = batch
-        pred = self.model(src.to(self.device), tgt_i.to(self.device))
-        loss = self.loss_fn(pred, tgt_o)
+        pred = self.model.inference(src.to(self.device), max_len=tgt_o.shape[1])
+        
+        pred = self.process_validation_outs(pred)
+        
+        # loss = self.loss_fn(pred, tgt_o)
         num_tokens = (tgt_o != 0).sum().item()
-        validation_loss += loss.item() * num_tokens
+        # validation_loss += loss.item() * num_tokens
+        
         num_total_tokens += num_tokens
+        acc_exact = pred == tgt_o.to(self.device)
+        acc_exact = acc_exact[tgt_o != 0].sum()
+        validation_acc += acc_exact.item()
         
-        acc = torch.argmax(pred, dim=-1) == tgt_o.to(self.device)
-        acc = acc[tgt_o != 0].sum()
-        validation_acc += acc.item()
+        metric_dict = self.calc_validation_acc(pred, tgt_o)
         
-    return validation_loss / num_total_tokens, validation_acc / num_total_tokens
+    return validation_loss / num_total_tokens, validation_acc / num_total_tokens, metric_dict
+
+  def process_validation_outs(self, pred):
+    for prd in pred.cpu().numpy():
+      end_indices, *_ = np.where(prd == 2)
+      if end_indices.shape[0] > 1:
+        end_index = end_indices.item(1)
+        prd[end_index:] = 0
+    
+    pred = torch.tensor(pred[:, 1:], dtype=torch.float64)
+    
+    return pred
+  
+  def calc_validation_acc(self, pred, tgt_o):
+    pred.cpu()
+    tgt_o.cpu()
+    
+    num_total = pred.shape[0]
+    cnts = [0, 0, 0, 0] # [exact, position, notes, length]
+
+    length_match_token_cnt = 0
+    add_cnts = [0, 0] # [exact, pclass]
+    
+    split_octave_and_pclass = lambda string: re.findall(r'(배|하배|하하배|청|중청)?(.+)', string)[0]
+    
+    for prd, tar in zip(pred.tolist(), tgt_o.tolist()):
+      prd_filtered = self.tokenizer.decode(list(map(lambda x: int(x), filter(lambda x: x not in (0, 1, 2), prd))) )
+      tar_filtered = self.tokenizer.decode(list(map(lambda x: int(x), filter(lambda x: x not in (0, 1, 2), tar))) )
+      
+      if tar_filtered == prd_filtered:
+        cnts[0] += 1
+      
+      tar_notes, tar_positions = self.get_notes_and_positions(prd_filtered)
+      prd_notes, prd_positions = self.get_notes_and_positions(tar_filtered)
+      
+      if len(tar_notes) == len(prd_notes):
+        cnts[3] += 1
+        length_match_token_cnt += len(tar_notes)
+        
+        for note, hnote in zip(tar_notes, prd_notes):
+          note_oct, note_pc = split_octave_and_pclass(note)
+          hnote_oct, hnote_pc = split_octave_and_pclass(hnote)
+          
+          if note_oct == hnote_oct and note_pc == hnote_pc:
+            add_cnts[0] += 1
+            
+          if note_pc == hnote_pc:
+            add_cnts[1] += 1
+      
+      if tar_positions == prd_positions:
+        cnts[1] += 1
+      
+      if tar_notes == prd_notes:
+        cnts[2] += 1
+      
+      pred.to(self.device)
+      tgt_o.to(self.device)
+      
+      cnts = [ cnt / num_total for cnt in cnts ]
+      add_cnts = [ a_cnt / length_match_token_cnt if length_match_token_cnt > 0 else 0 for a_cnt in add_cnts ] 
+      
+      return { key: value for key, value in zip(['exact_all', 'exact_pos', 'exact_note', 'exact_length', 'note_pitch', 'note_pcalss'], cnts+add_cnts) }
+  
+  @staticmethod
+  def get_notes_and_positions(label):
+    pattern = r'([^_\s:]+|_+[^_\s:]+|[^:]\d+|[-])'
+    
+    token_groups = label.split()
+    
+    notes = []
+    positions = []
+    
+    for group in token_groups:
+      findings = re.findall(pattern, group)
+      notes.append(findings[0])
+      positions.append(findings[-1])
+    
+    return notes, positions
 
 def get_nll_loss(predicted_prob_distribution, indices_of_correct_token, eps=1e-10, ignore_index=0):
   '''
@@ -490,26 +629,31 @@ def get_img_paths(img_path_base):
   return res_dict
 
 def main():
-  model_name = 'synth_only_240204_001'
+  model_name = 'synth_only_240220_001'
   note_img_path_dict = get_img_paths('test/synth/src/notes')
   
-  train_set = Dataset('data/train/001_1706859356.csv', note_img_path_dict)
-  valid_set = Dataset('data/valid/001_1706861315.csv', note_img_path_dict, is_valid=True)
+  train_set = Dataset('data/train/003_1708392544.csv', note_img_path_dict)
+  valid_set = Dataset('data/valid/003_1708393655.csv', note_img_path_dict, is_valid=True)
 
   tokenizer = train_set.tokenizer + valid_set.tokenizer
   train_set.tokenizer = tokenizer
   valid_set.tokenizer = tokenizer
+  
+  wandb_run = wandb.init(
+    project='jeonggan-omr',
+    name=model_name
+  )
 
-  with open('data/001_tokenizer.txt', 'w') as f:
+  with open(f'model/{model_name}_tokenizer.txt', 'w') as f:
     f.write('\n'.join(tokenizer.vocab))
 
   model = OMRModel(80, vocab_size=len(tokenizer.vocab), num_gru_layers=2)
   optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
   train_loader = DataLoader(train_set, batch_size=100, shuffle=True, collate_fn=pad_collate)
-  valid_loader = DataLoader(valid_set, batch_size=100, shuffle=False, collate_fn=pad_collate)
+  valid_loader = DataLoader(valid_set, batch_size=1000, shuffle=False, collate_fn=pad_collate)
 
-  trainer = Trainer(model, optimizer, get_nll_loss, train_loader, valid_loader, 'cuda', model_name=model_name, model_save_path='model')
+  trainer = Trainer(model, optimizer, get_nll_loss, train_loader, valid_loader, tokenizer, 'cuda', wandb=wandb_run, model_name=model_name, model_save_path='model')
   
   trainer.train_and_validate()
 

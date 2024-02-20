@@ -862,7 +862,6 @@ class JeongganSynthesizer:
   def __call__(self):
     img_w, img_h = self.get_size()
     img = self.get_blank(img_w, img_h)
-    # jng_dict, label = self.get_label_dict(img_aspect_ratio = img_h/img_w)
     jng_dict, label = self.get_label_dict()
     
     jng_img = self.generate_image_by_dict(img, jng_dict)
@@ -873,7 +872,7 @@ class JeongganSynthesizer:
     img_w, img_h = self.get_size()
     img = self.get_blank(img_w, img_h)
     
-    jng_dict, label = self.get_label_dict(img_aspect_ratio = img_h/img_w, range_limit=range_limit)
+    jng_dict, label = self.get_label_dict(range_limit=range_limit)
     
     jng_img = self.generate_image_by_dict(img, jng_dict)
     
@@ -881,7 +880,7 @@ class JeongganSynthesizer:
   
   # label generator
   @classmethod
-  def get_label_dict(cls, img_aspect_ratio = 1.0, div=None, range_limit=True):
+  def get_label_dict(cls, div=None, range_limit=True):
     pitch_range = cls.get_pitch_range()
     
     if not range_limit:

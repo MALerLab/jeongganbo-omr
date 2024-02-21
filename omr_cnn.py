@@ -1,9 +1,11 @@
+import sys, getopt
 import random
 import re
 from pathlib import Path
 from operator import itemgetter
 import csv
 
+from omegaconf import OmegaConf
 from tqdm.auto import tqdm
 import pandas as pd
 import cv2
@@ -264,10 +266,11 @@ class OMRModel(nn.Module):
     self.gru = nn.GRU(hidden_size, hidden_size, num_gru_layers, batch_first=True, dropout = 0.2)
 
     self.attn_layer1 = QKVAttention(hidden_size)
-    self.attn_layer2 = QKVAttention(hidden_size)
-
     self.final_gru1 = nn.GRU(hidden_size * 2, hidden_size, 1, batch_first=True)
+
+    self.attn_layer2 = QKVAttention(hidden_size)
     self.final_gru2 = nn.GRU(hidden_size * 2, hidden_size*2, 1, batch_first=True)
+    
     self.proj = nn.Linear(hidden_size*2, vocab_size)
 
   def run_img_cnn(self, x):
@@ -290,9 +293,7 @@ class OMRModel(nn.Module):
     gru_out, _ = self.gru(y, context_vector)
 
     attention = self.attn_layer1(gru_out, x)
-
     cat_out = torch.cat([gru_out, attention], dim=-1)
-
     cat_out, _ = self.final_gru1(cat_out)
     
     attention = self.attn_layer2(cat_out, x)
@@ -322,9 +323,7 @@ class OMRModel(nn.Module):
       gru_out, last_hidden = self.gru(y, last_hidden)
       
       attention = self.attn_layer1(gru_out, x)
-      
       cat_out = torch.cat([gru_out, attention], dim=-1)
-      
       cat_out, final_gru_last_hidden1 = self.final_gru1(cat_out, final_gru_last_hidden1)        
       
       attention = self.attn_layer2(cat_out, x)
@@ -628,35 +627,73 @@ def get_img_paths(img_path_base):
 
   return res_dict
 
-def main():
-  model_name = 'synth_only_240220_001'
+def getConfs(argv):
+  args = argv[1:]
+  
+  try:
+    opt_list, _ = getopt.getopt(args, 'f:n:p:e:')
+    
+  except getopt.GetoptError:
+    print('somethings gone wrong')
+    return None
+
+  opt_dict = {}
+  
+  for opt in opt_list:
+    name, value = opt 
+    name = name.replace('-', '')
+    
+    if value:
+      opt_dict[name] = value
+    else:
+      opt_dict[name] = name
+    
+  conf = OmegaConf.load(opt_dict['f'])
+  
+  if opt_dict.get('e'):
+    num_epoch_arg = int(opt_dict['e'])
+    conf.num_epoch = num_epoch_arg
+    
+  if opt_dict.get('n'):
+    name_arg = opt_dict['n']
+    conf.run_name = name_arg
+    
+  if opt_dict.get('p'):
+    project_arg = opt_dict['p']
+    conf.project_name = project_arg
+  
+  return conf
+
+def main(argv):
+  conf = getConfs(argv)
+  
   note_img_path_dict = get_img_paths('test/synth/src/notes')
   
-  train_set = Dataset('data/train/003_1708392544.csv', note_img_path_dict)
-  valid_set = Dataset('data/valid/003_1708393655.csv', note_img_path_dict, is_valid=True)
+  train_set = Dataset(conf.train_set_path, note_img_path_dict)
+  valid_set = Dataset(conf.valid_set_path, note_img_path_dict, is_valid=True)
 
   tokenizer = train_set.tokenizer + valid_set.tokenizer
   train_set.tokenizer = tokenizer
   valid_set.tokenizer = tokenizer
   
   wandb_run = wandb.init(
-    project='jeonggan-omr',
-    name=model_name
+    project=conf.project_name,
+    name=conf.model_name,
+    notes=conf.wandb_notes
   )
 
-  with open(f'model/{model_name}_tokenizer.txt', 'w') as f:
+  with open(f'model/{conf.model_name}_tokenizer.txt', 'w') as f:
     f.write('\n'.join(tokenizer.vocab))
 
   model = OMRModel(80, vocab_size=len(tokenizer.vocab), num_gru_layers=2)
   optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
-  train_loader = DataLoader(train_set, batch_size=100, shuffle=True, collate_fn=pad_collate)
+  train_loader = DataLoader(train_set, batch_size=conf.train_batch_size, shuffle=True, collate_fn=pad_collate)
   valid_loader = DataLoader(valid_set, batch_size=1000, shuffle=False, collate_fn=pad_collate)
 
-  trainer = Trainer(model, optimizer, get_nll_loss, train_loader, valid_loader, tokenizer, 'cuda', wandb=wandb_run, model_name=model_name, model_save_path='model')
+  trainer = Trainer(model, optimizer, get_nll_loss, train_loader, valid_loader, tokenizer, 'cuda', wandb=wandb_run, model_name=conf.model_name, model_save_path='model')
   
   trainer.train_and_validate()
 
 if __name__ == "__main__":
-
-  main()
+  main(sys.argv)

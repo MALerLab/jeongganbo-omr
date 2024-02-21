@@ -1071,7 +1071,7 @@ class JeongganSynthesizer:
         
         # size noise
         if apply_noise:
-          rand_ratio = uniform(0.8, 1.1)
+          rand_ratio = uniform(0.9, 1.1)
           note_img = self.resize_img_by_height(note_img, round(note_img.shape[0] * rand_ratio))
         
         pos_x = col_template[col_idx]
@@ -1081,8 +1081,8 @@ class JeongganSynthesizer:
           pos_y += row_heights[row_idx]//2 - note_img.shape[0]//2
         
         if apply_noise:
-          pos_x += randint(-3, 3)
-          pos_y += randint(-3, 3)
+          pos_x += randint(-2, 2)
+          pos_y += randint(-2, 2)
       
         note_img = self.remove_background(note_img)
       

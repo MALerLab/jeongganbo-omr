@@ -1,0 +1,8 @@
+project_name: 'jeonggan-omr'
+model_name: 'synth_only_240220_003'
+train_set_path: 'data/train/003_1708392544.csv'
+valid_set_path: 'data/valid/003_1708393655.csv'
+
+train_batch_size: 100
+
+wandb_notes: "slight change on jng synth's random noise + original model arch"

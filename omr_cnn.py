@@ -499,7 +499,7 @@ class Trainer:
         # validation_loss += loss.item() * num_tokens
         
         num_total_tokens += num_tokens
-        acc_exact = pred == tgt_o.to(self.device)
+        acc_exact = pred.to(self.device) == tgt_o.to(self.device)
         acc_exact = acc_exact[tgt_o != 0].sum()
         validation_acc += acc_exact.item()
         
@@ -508,20 +508,23 @@ class Trainer:
     return validation_loss / num_total_tokens, validation_acc / num_total_tokens, metric_dict
 
   def process_validation_outs(self, pred):
-    for prd in pred.cpu().numpy():
+    new_pred = []
+    
+    for prd in pred.clone().detach().cpu().numpy():
       end_indices, *_ = np.where(prd == 2)
+      
       if end_indices.shape[0] > 1:
-        end_index = end_indices.item(1)
+        end_index = end_indices[1]
         prd[end_index:] = 0
+      
+      new_pred.append(prd[1:])
     
-    pred = torch.tensor(pred[:, 1:], dtype=torch.float64)
+    new_pred = np.stack(new_pred, axis=0)
+    new_pred = torch.tensor(new_pred, dtype=torch.float64)
     
-    return pred
+    return new_pred
   
   def calc_validation_acc(self, pred, tgt_o):
-    pred.cpu()
-    tgt_o.cpu()
-    
     num_total = pred.shape[0]
     cnts = [0, 0, 0, 0] # [exact, position, notes, length]
 
@@ -530,9 +533,12 @@ class Trainer:
     
     split_octave_and_pclass = lambda string: re.findall(r'(배|하배|하하배|청|중청)?(.+)', string)[0]
     
-    for prd, tar in zip(pred.tolist(), tgt_o.tolist()):
-      prd_filtered = self.tokenizer.decode(list(map(lambda x: int(x), filter(lambda x: x not in (0, 1, 2), prd))) )
-      tar_filtered = self.tokenizer.decode(list(map(lambda x: int(x), filter(lambda x: x not in (0, 1, 2), tar))) )
+    pred = pred.clone().detach().cpu().tolist()
+    tgt_o = tgt_o.clone().detach().cpu().tolist()
+    
+    for prd, tar in zip(pred, tgt_o):
+      prd_filtered = self.tokenizer.decode( list(map(int, filter(lambda x: x not in (0, 1, 2), prd))) )
+      tar_filtered = self.tokenizer.decode( list(map(int, filter(lambda x: x not in (0, 1, 2), tar))) )
       
       if tar_filtered == prd_filtered:
         cnts[0] += 1
@@ -559,14 +565,11 @@ class Trainer:
       
       if tar_notes == prd_notes:
         cnts[2] += 1
-      
-      pred.to(self.device)
-      tgt_o.to(self.device)
-      
-      cnts = [ cnt / num_total for cnt in cnts ]
-      add_cnts = [ a_cnt / length_match_token_cnt if length_match_token_cnt > 0 else 0 for a_cnt in add_cnts ] 
-      
-      return { key: value for key, value in zip(['exact_all', 'exact_pos', 'exact_note', 'exact_length', 'note_pitch', 'note_pcalss'], cnts+add_cnts) }
+    
+    cnts = [ cnt / num_total for cnt in cnts ]
+    add_cnts = [ a_cnt / length_match_token_cnt if length_match_token_cnt > 0 else 0 for a_cnt in add_cnts ] 
+    
+    return { key: value for key, value in zip(['exact_all', 'exact_pos', 'exact_note', 'exact_length', 'note_pitch', 'note_pcalss'], cnts+add_cnts) }
   
   @staticmethod
   def get_notes_and_positions(label):

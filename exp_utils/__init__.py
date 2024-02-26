@@ -1,7 +1,7 @@
 from .jeonggan_processor import JeongganProcessor
 from .jeonggan_synthesizer import JeongganSynthesizer
 
-from .const import COLOR_DICT, PNAME_LIST, SPECIAL_CHAR_TO_NAME, PNAME_EN_TO_KR, PNAME_KR_TO_EN
+from .const import COLOR_DICT, NAME_EN_TO_KR, PNAME_LIST, PNAME_EN_LIST, SPECIAL_CHAR_TO_NAME, PNAME_EN_TO_KR, PNAME_KR_TO_EN, SYMBOL_W_POS_LIST, SYMBOL_W_POS_EN_LIST, SYMBOL_WO_POS_LIST, SYMBOL_WO_POS_EN_LIST, SYMBOL_LIST, SYMBOL_EN_LIST, SYMBOL_W_POS_EN_TO_KR, SYMBOL_W_POS_KR_TO_EN, SYMBOL_WO_POS_EN_TO_KR, SYMBOL_WO_POS_KR_TO_EN
 
 # only for experiment purpose
 def make_jeonggan_generator(reader, jngb):

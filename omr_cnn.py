@@ -18,7 +18,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
-from exp_utils import JeongganSynthesizer
+from exp_utils import JeongganSynthesizer, PNAME_EN_LIST, SYMBOL_W_POS_EN_LIST
 
 class RandomBoundaryDrop:
   def __init__(self, amount=3) -> None:
@@ -605,28 +605,39 @@ def get_nll_loss(predicted_prob_distribution, indices_of_correct_token, eps=1e-1
   loss = -filtered_prob
   return loss.mean()
 
-def get_img_paths(img_path_base):
+def get_img_paths(img_path_base, sub_dirs):
   if isinstance(img_path_base, str):
     img_path_base = Path(img_path_base)
-
+  
+  paths = [ (img_path_base/sd).glob('*.png') for sd in sub_dirs ]
+  paths = [ p for sd_p in paths for p in sd_p ]
+  
   raw_dict = {
-    str(path).split('/')[-1].replace('.png', ''): str(path) \
-    for path in img_path_base.glob(f'*.png')
+    str(p).split('/')[-1].replace('.png', ''): str(p) \
+    for p in paths
   }
 
-  res_dict = {}
+  res_dict = {
+    'note': {},
+    'symbol': {}
+  }
+  
+  pname_set = set(PNAME_EN_LIST)
+  symbol_w_pos_set = set(SYMBOL_W_POS_EN_LIST)
 
   for name, path in sorted(raw_dict.items(), key=lambda x: x[0]):
     name = re.sub(r'(_\d\d\d)|(_ot)', '', name)
+    category = 'note' if name in pname_set or name in symbol_w_pos_set else 'symbol'
     
-    if res_dict.get(name, False):
-      res_dict[name].append(path)
+    if res_dict[category].get(name, False):
+      res_dict[category][name].append(path)
     else:
-      res_dict[name] = [path]
+      res_dict[category][name] = [path]
 
-  for name, paths in res_dict.items():
-    if len(paths) < 2:
-      res_dict[name] = paths[0]
+  for category, path_dict in res_dict.items():
+    for name, paths in path_dict.items():
+      if len(paths) < 2:
+        res_dict[category][name] = paths[0]
 
   return res_dict
 
@@ -666,6 +677,24 @@ def getConfs(argv):
     conf.project_name = project_arg
   
   return conf
+
+def valid_test():
+  conf = OmegaConf.load('configs/synth_only_240221_001_debug.yaml')
+  
+  note_img_path_dict = get_img_paths('test/synth/src/notes')
+  
+  valid_set = Dataset(conf.valid_set_path, note_img_path_dict, is_valid=True)
+
+  tokenizer = Tokenizer(vocab_txt_fn=conf.tokenizer_path)
+
+  model = OMRModel(80, vocab_size=len(tokenizer.vocab), num_gru_layers=2)
+  model.load_state_dict(torch.load(conf.model_weigth_path)['model'])
+
+  valid_loader = DataLoader(valid_set, batch_size=1000, shuffle=False, collate_fn=pad_collate)
+
+  trainer = Trainer(model, None, get_nll_loss, None, valid_loader, tokenizer, 'cuda', model_name=conf.model_name, model_save_path='model')
+  
+  trainer.validate()
 
 def main(argv):
   conf = getConfs(argv)

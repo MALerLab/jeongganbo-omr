@@ -1,9 +1,11 @@
+import re
 from random import randint, choice, uniform
+from operator import itemgetter
 
 import cv2
 import numpy as np
 
-from exp_utils import JeongganProcessor
+from .const import SYMBOL_W_POS_EN_LIST, NAME_EN_TO_KR, NAME_KR_TO_EN
 
 INIT_WIDTH = 100
 WIDTH_NOISE_SIG = 3.34
@@ -38,7 +40,8 @@ PITCH_ORDER = [
 
 class JeongganSynthesizer:
   def __init__(self, img_path_dict):
-    self.img_path_dict = img_path_dict
+    self.note_img_path_dict = img_path_dict['note']
+    self.symbol_img_path_dict = img_path_dict['symbol']
   
   def __call__(self):
     img_w, img_h = self.get_size()
@@ -69,7 +72,7 @@ class JeongganSynthesizer:
     
     jng_dict = cls.get_jng_dict( pitch_range )
     
-    label = JeongganProcessor.get_label(jng_dict)
+    label = cls.dict2label(jng_dict)
     
     return jng_dict, label
     
@@ -93,7 +96,7 @@ class JeongganSynthesizer:
 
   @staticmethod
   def get_jng_dict(plist, div=None):
-    plist = ['conti', 'pause'] + plist
+    plist = plist + ['conti', 'pause'] + SYMBOL_W_POS_EN_LIST
     
     row_div = div if div else randint(1, 3)
     
@@ -107,6 +110,7 @@ class JeongganSynthesizer:
       cols = []
       
       for _ in range(col_div):
+        # sym = choice()
         cols.append( choice(plist) )
       
       res['rows'].append({
@@ -118,7 +122,7 @@ class JeongganSynthesizer:
   
   # image generation
   def generate_image_by_label(self, label, width, height):
-    jng_dict = JeongganProcessor.label2dict(label)
+    jng_dict = self.label2dict(label)
     
     img = self.get_blank(width, height)
     
@@ -140,7 +144,7 @@ class JeongganSynthesizer:
       row_height = []
       
       for note_name in row:
-        note_img_path = self.img_path_dict[note_name]
+        note_img_path = self.note_img_path_dict[note_name]
         
         if isinstance(note_img_path, list):
           note_img_path = choice(note_img_path)
@@ -365,3 +369,112 @@ class JeongganSynthesizer:
     bg = cls.get_blank(img.shape[1], height)
     
     return cls.insert_img(bg, img, 0, MARK_HEIGHT//2 - img.shape[0]//2)
+  
+  @staticmethod
+  def dict2label(result_dict):
+    # result_dict: { row_div: int, rows: list } 
+    # rows: [ { col_div: int, cols: [ pname ] } ]
+    
+    def cvt_name(g):
+      if isinstance(g, list):
+        return '_'.join([ NAME_EN_TO_KR[el] for el in group ])
+      
+      return NAME_EN_TO_KR[g]
+    
+    result_str = ''
+    
+    row_div, rows = itemgetter('row_div', 'rows')(result_dict)
+    
+    if row_div == 1:
+      group = rows[0]['cols'][0]
+      group = cvt_name(group)
+      
+      result_str += f'{group}' + ':' + str(5)
+    
+    elif row_div == 3:
+      for row_idx, row in enumerate(rows):
+        col_div, cols = itemgetter('col_div', 'cols')(row)
+        
+        if col_div == 1:
+          group = cols[0]
+          group = cvt_name(group)
+          result_str += group + ':' + str(2 + 3 * row_idx) + ' '
+          
+        else:
+          for col_idx, group in enumerate(cols):
+            group = cvt_name(group)
+            result_str += group + ':' + str( 1 + (3 * row_idx) + (2 * col_idx) ) + ' '
+    
+    elif row_div == 2:
+      for row_idx, row in enumerate(rows):
+        col_div, cols = itemgetter('col_div', 'cols')(row)
+        
+        if col_div == 1:
+          group = cols[0]
+          group = cvt_name(group)
+          result_str += group + ':' + str(10 + row_idx) + ' '
+          
+        else:
+          for col_idx, group in enumerate(cols):
+            group = cvt_name(group)
+            result_str += group + ':' + str( 12 + (2*row_idx) + col_idx ) + ' '
+    
+    return result_str.strip()
+  
+  @classmethod
+  def label2dict(cls, label: str):
+    pattern = r'([^_\s:]+|_+[^_\s:]+|[^:]\d+|[-])'
+    
+    notes = label.split()
+    
+    token_groups = []
+    
+    for note in notes:
+      findings = re.findall(pattern, note)
+      token_groups.append( findings )
+    
+    row_div = cls.get_row_div( list( map(lambda g: int(g[-1]), token_groups) ) )
+    rows = [ { 'col_div': 0, 'cols': [] } for _ in range(row_div) ]
+    
+    for group in token_groups:
+      pname, *_, pos  = group
+      row_idx = cls.pos2colIdx(pos, row_div)
+      
+      rows[row_idx]['col_div'] += 1
+      rows[row_idx]['cols'].append( NAME_KR_TO_EN[pname] )
+    
+    return {
+      'row_div': row_div,
+      'rows': rows
+    }
+  
+  @staticmethod
+  def get_row_div(poses):
+    row_div = 0
+    
+    if len(poses) == 1 and poses[0] == 5:
+      row_div = 1
+      
+    elif sum([ 1 if pos >= 10 else 0 for pos in poses ]) == len(poses):
+      row_div = 2
+
+    else:
+      row_div = 3
+    
+    return row_div
+  
+  @staticmethod
+  def pos2colIdx(pos, row_div):
+    pos = int(pos)
+    
+    if row_div == 1:
+      return 0
+    
+    elif row_div == 3:
+      return (pos - 1) // row_div
+    
+    else:
+      if pos < 12:
+        return (pos - 10)
+      else:
+        return (pos - 12) // row_div

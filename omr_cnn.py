@@ -18,7 +18,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
-from exp_utils import JeongganSynthesizer, PNAME_EN_LIST, SYMBOL_W_POS_EN_LIST
+from exp_utils import JeongganSynthesizer, PNAME_EN_LIST, SYMBOL_W_DUR_EN_LIST
 
 class RandomBoundaryDrop:
   def __init__(self, amount=3) -> None:
@@ -123,12 +123,7 @@ class Dataset:
     annotations, width, height = itemgetter('label', 'width', 'height')(row)
     img = None
     
-    while True:
-      try:
-        img = self.jng_synth.generate_image_by_label(annotations, width, height)
-        break
-      except:
-        pass
+    img = self.jng_synth.generate_image_by_label(annotations, width, height)
     
     img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
     img = self.transform(img)
@@ -610,34 +605,30 @@ def get_img_paths(img_path_base, sub_dirs):
     img_path_base = Path(img_path_base)
   
   paths = [ (img_path_base/sd).glob('*.png') for sd in sub_dirs ]
-  paths = [ p for sd_p in paths for p in sd_p ]
+  paths = [ 
+    p 
+    for sd_p in paths 
+    for p in sd_p 
+  ]
   
   raw_dict = {
     str(p).split('/')[-1].replace('.png', ''): str(p) \
     for p in paths
   }
 
-  res_dict = {
-    'note': {},
-    'symbol': {}
-  }
-  
-  pname_set = set(PNAME_EN_LIST)
-  symbol_w_pos_set = set(SYMBOL_W_POS_EN_LIST)
+  res_dict = {}
 
   for name, path in sorted(raw_dict.items(), key=lambda x: x[0]):
     name = re.sub(r'(_\d\d\d)|(_ot)', '', name)
-    category = 'note' if name in pname_set or name in symbol_w_pos_set else 'symbol'
     
-    if res_dict[category].get(name, False):
-      res_dict[category][name].append(path)
+    if res_dict.get(name, False):
+      res_dict[name].append(path)
     else:
-      res_dict[category][name] = [path]
+      res_dict[name] = [path]
 
-  for category, path_dict in res_dict.items():
-    for name, paths in path_dict.items():
-      if len(paths) < 2:
-        res_dict[category][name] = paths[0]
+  for name, paths in res_dict.items():
+    if len(paths) < 2:
+      res_dict[name] = paths[0]
 
   return res_dict
 
@@ -678,52 +669,40 @@ def getConfs(argv):
   
   return conf
 
-def valid_test():
-  conf = OmegaConf.load('configs/synth_only_240221_001_debug.yaml')
-  
-  note_img_path_dict = get_img_paths('test/synth/src/notes')
-  
-  valid_set = Dataset(conf.valid_set_path, note_img_path_dict, is_valid=True)
-
-  tokenizer = Tokenizer(vocab_txt_fn=conf.tokenizer_path)
-
-  model = OMRModel(80, vocab_size=len(tokenizer.vocab), num_gru_layers=2)
-  model.load_state_dict(torch.load(conf.model_weigth_path)['model'])
-
-  valid_loader = DataLoader(valid_set, batch_size=1000, shuffle=False, collate_fn=pad_collate)
-
-  trainer = Trainer(model, None, get_nll_loss, None, valid_loader, tokenizer, 'cuda', model_name=conf.model_name, model_save_path='model')
-  
-  trainer.validate()
-
 def main(argv):
   conf = getConfs(argv)
-  
-  note_img_path_dict = get_img_paths('test/synth/src/notes')
-  
-  train_set = Dataset(conf.train_set_path, note_img_path_dict)
-  valid_set = Dataset(conf.valid_set_path, note_img_path_dict, is_valid=True)
-
-  tokenizer = train_set.tokenizer + valid_set.tokenizer
-  train_set.tokenizer = tokenizer
-  valid_set.tokenizer = tokenizer
   
   wandb_run = wandb.init(
     project=conf.project_name,
     name=conf.model_name,
     notes=conf.wandb_notes
   )
+  
+  print('\nSTART: data_set loading\n')
+  
+  note_img_path_dict = get_img_paths('test/synth/src', ['notes', 'symbols'])
+  
+  train_set = Dataset(conf.train_set_path, note_img_path_dict)
+  valid_set = Dataset(conf.valid_set_path, note_img_path_dict, is_valid=True)
+  
+  train_loader = DataLoader(train_set, batch_size=conf.train_batch_size, shuffle=True, collate_fn=pad_collate)
+  valid_loader = DataLoader(valid_set, batch_size=1000, shuffle=False, collate_fn=pad_collate)
+  
+  print('\nCOMPLETE: data_set loading\n')
 
+  tokenizer = train_set.tokenizer + valid_set.tokenizer
+  train_set.tokenizer = tokenizer
+  valid_set.tokenizer = tokenizer
+  
   with open(f'model/{conf.model_name}_tokenizer.txt', 'w') as f:
     f.write('\n'.join(tokenizer.vocab))
 
   model = OMRModel(80, vocab_size=len(tokenizer.vocab), num_gru_layers=2)
   optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
-  train_loader = DataLoader(train_set, batch_size=conf.train_batch_size, shuffle=True, collate_fn=pad_collate)
-  valid_loader = DataLoader(valid_set, batch_size=1000, shuffle=False, collate_fn=pad_collate)
-
   trainer = Trainer(model, optimizer, get_nll_loss, train_loader, valid_loader, tokenizer, 'cuda', wandb=wandb_run, model_name=conf.model_name, model_save_path='model')
+  
+  print('\nStart: Training\n')
   
   trainer.train_and_validate()
 

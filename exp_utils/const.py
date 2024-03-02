@@ -200,16 +200,23 @@ PNAME_KR_TO_EN = {
   '쉼표': 'pause'
 }
 
-SYMBOL_W_POS_LIST = ['노', '니', '로', '리', '니나*', '느나', '노라', '느니', '니레나', '네로나', '니로나', '니느라니', '느나니나', '느나르나니', '같은음표']
-SYMBOL_W_POS_EN_LIST = ['no', 'ni', 'ro', 'ri', 'nina-dur', 'neuna', 'nora', 'neuni', 'nirena', 'nerona', 'nirona', 'nineurani', 'neunanina', 'neunareunani', 'repeat']
+SYMBOL_W_DUR_LIST = ['노', '니', '로', '리', '니나*', '느나', '노라', '느니', '노라느니', '니레나', '네로나', '니로나', '니느라니', '느나니나', '느나르나니', '같은음표']
+SYMBOL_W_DUR_EN_LIST = ['no', 'ni', 'ro', 'ri', 'nina-dur', 'neuna', 'nora', 'neuni', 'noraneuni', 'nirena', 'nerona', 'nirona', 'nineurani', 'neunanina', 'neunareunani', 'repeat']
 
-SYMBOL_WO_POS_LIST = ['나니나', '나느나', '니레', '니나', '니로', '노네', '너녜', '노니로', '노리노', '네로네', '느네느', '나니로', '로니로', '느로니르', '느니-르', '니루-니', '나니르노니, 르''특강표', '늘임표', '흘림표', '겹흘림표', '반길이표', '덧길이표', '미는표', '떠이어표', '끊는표', '농음표', '풀어내림표']
-SYMBOL_WO_POS_EN_LIST = ['nanina', 'naneuna', 'nire', 'nina', 'niro', 'none', 'neonye', 'noniro', 'norino', 'nerone', 'neuneneu', 'naniro', 'roniro', 'neuronireu', 'neuni-reu', 'niru-ni', 'nanireunonireu', 'accent', 'fermata', 'flow', 'rep-flow', 'len-half', 'len-twice', 'push', 'roll', 'short', 'vib', 'vib-long']
+SYMBOL_WO_DUR_LIST = ['나니나', '나느나', '니레', '니나', '니로', '노네', '너녜', '노니로', '노리노', '네로네', '느네느', '나니로', 
+#'로니로', 
+'느로니르', '느니-르', '니루-니', '나니르노니르', '특강표', '늘임표', '흘림표', '겹흘림표', '반길이표', '덧길이표', '미는표', '떠이어표', '끊는표', '농음표', '풀어내림표']
 
-SYMBOL_LIST = SYMBOL_W_POS_LIST + SYMBOL_WO_POS_LIST
-SYMBOL_EN_LIST = SYMBOL_W_POS_EN_LIST + SYMBOL_WO_POS_EN_LIST
+SYMBOL_WO_DUR_ADD_EN_LIST = ['len-half/len-double', 'len-double/len-half']
 
-SYMBOL_W_POS_EN_TO_KR = {
+SYMBOL_WO_DUR_EN_LIST = ['nanina', 'naneuna', 'nire', 'nina', 'niro', 'none', 'neonye', 'noniro', 'norino', 'nerone', 'neuneneu', 'naniro', 
+# 'roniro', 
+'neuronireu', 'neuni-reu', 'niru-ni', 'nanireunonireu', 'accent', 'fermata', 'flow', 'rep-flow', 'len-half', 'len-double', 'push', 'roll', 'short', 'vib', 'vib-long'] + SYMBOL_WO_DUR_ADD_EN_LIST
+
+SYMBOL_LIST = SYMBOL_W_DUR_LIST + SYMBOL_WO_DUR_LIST
+SYMBOL_EN_LIST = SYMBOL_W_DUR_EN_LIST + SYMBOL_WO_DUR_EN_LIST
+
+SYMBOL_W_DUR_EN_TO_KR = {
   'no': '노',
   'ni': '니',
   'ro': '로',
@@ -218,6 +225,7 @@ SYMBOL_W_POS_EN_TO_KR = {
   'neuna': '느나',
   'nora': '노라',
   'neuni': '느니',
+  'noraneuni': '노라느니',
   'nirena': '니레나',
   'nerona': '네로나',
   'nirona': '니로나',
@@ -227,7 +235,7 @@ SYMBOL_W_POS_EN_TO_KR = {
   'repeat': '같은음표'
 }
 
-SYMBOL_W_POS_KR_TO_EN = {
+SYMBOL_W_DUR_KR_TO_EN = {
   '노': 'no',
   '니': 'ni',
   '로': 'ro',
@@ -236,6 +244,7 @@ SYMBOL_W_POS_KR_TO_EN = {
   '느나': 'neuna',
   '노라': 'nora',
   '느니': 'neuni',
+  '노라느니': 'noraneuni',
   '니레나': 'nirena',
   '네로나': 'nerona',
   '니로나': 'nirona',
@@ -245,7 +254,7 @@ SYMBOL_W_POS_KR_TO_EN = {
   '같은음표': 'repeat'
 }
 
-SYMBOL_WO_POS_EN_TO_KR = {
+SYMBOL_WO_DUR_EN_TO_KR = {
   'nanina': '나니나',
   'naneuna': '나느나',
   'nire': '니레',
@@ -258,7 +267,7 @@ SYMBOL_WO_POS_EN_TO_KR = {
   'nerone': '네로네',
   'neuneneu': '느네느',
   'naniro': '나니로',
-  'roniro': '로니로',
+  # 'roniro': '로니로',
   'neuronireu': '느로니르',
   'neuni-reu': '느니-르',
   'niru-ni': '니루-니',
@@ -267,16 +276,18 @@ SYMBOL_WO_POS_EN_TO_KR = {
   'fermata': '늘임표',
   'flow': '흘림표',
   'rep-flow': '겹흘림표',
-  'len-half': '',
-  'len-twice': '',
+  'len-half': '반길이표',
+  'len-double': '덧길이표',
   'push': '미는표',
   'roll': '떠이어표',
   'short': '끊는표',
   'vib': '농음표',
   'vib-long': '풀어내림표',
+  'len-half/len-double': '반길이표/덧길이표', 
+  'len-double/len-half': '덧길이표/반길이표'
 }
 
-SYMBOL_WO_POS_KR_TO_EN = {
+SYMBOL_WO_DUR_KR_TO_EN = {
   '나니나': 'nanina',
   '나느나': 'naneuna',
   '니레': 'nire',
@@ -289,7 +300,7 @@ SYMBOL_WO_POS_KR_TO_EN = {
   '네로네': 'nerone',
   '느네느': 'neuneneu',
   '나니로': 'naniro',
-  '로니로': 'roniro',
+  # '로니로': 'roniro',
   '느로니르': 'neuronireu',
   '느니-르': 'neuni-reu',
   '니루-니': 'niru-ni',
@@ -299,13 +310,17 @@ SYMBOL_WO_POS_KR_TO_EN = {
   '흘림표': 'flow',
   '겹흘림표': 'rep-flow',
   '반길이표': 'len-half',
-  '덧길이표': 'len-twice',
+  '덧길이표': 'len-double',
   '미는표': 'push',
   '떠이어표': 'roll',
   '끊는표': 'short',
   '농음표': 'vib',
   '풀어내림표': 'vib-long',
+  '반길이표/덧길이표': 'len-half/len-double',
+  '덧길이표/반길이표': 'len-double/len-half'
 }
 
-NAME_EN_TO_KR = dict(PNAME_EN_TO_KR, **SYMBOL_W_POS_EN_TO_KR, **SYMBOL_WO_POS_EN_TO_KR)
-NAME_KR_TO_EN = dict(PNAME_KR_TO_EN, **SYMBOL_W_POS_KR_TO_EN, **SYMBOL_WO_POS_KR_TO_EN)
+NAME_EN_TO_KR = dict(PNAME_EN_TO_KR, **SYMBOL_W_DUR_EN_TO_KR, **SYMBOL_WO_DUR_EN_TO_KR)
+NAME_KR_TO_EN = dict(PNAME_KR_TO_EN, **SYMBOL_W_DUR_KR_TO_EN, **SYMBOL_WO_DUR_KR_TO_EN)
+
+NOTE_W_DUR_EN_SET = set(PNAME_EN_LIST + SYMBOL_W_DUR_EN_LIST)

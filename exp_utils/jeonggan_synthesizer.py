@@ -181,7 +181,10 @@ class JeongganSynthesizer:
           el_img = self.img_dict[el_name_cp].copy()
           
           if isinstance(el_img, list):
-            el_img = choice(el_img).copy()
+            if apply_noise:
+              el_img = choice(el_img).copy()
+            else:
+              el_img = el_img[0].copy()
           
           el_img_dim = list(el_img.shape[:2])
           

@@ -1,4 +1,5 @@
 import re
+import pickle
 from fractions import Fraction
 from pathlib import Path
 from collections import OrderedDict
@@ -25,13 +26,24 @@ class Symbol:
     note_and_ornament = text.split(':')[0]
     self.note = note_and_ornament.split('_')[0]
     self.ornament = note_and_ornament.split('_')[1:] if '_' in note_and_ornament else None
+    self.duration = None
+    self.global_offset = None
     if self.note in PITCH2MIDI:
       self.midi = PITCH2MIDI[self.note]
     else:
       self.midi = 0
   
   def __repr__(self) -> str:
-    return f'{self.note}({self.midi}) - {self.ornament} @ {self.offset}'
+    return f'{self.note}({self.midi}) - {self.ornament}, duration:{self.duration} @ {self.offset}, {self.global_offset}'
+  
+  def __str__(self) -> str:
+    ornaments = '_'.join(self.ornament) if self.ornament is not None else ''
+    duration = self.duration if self.duration is not None else ''
+    output =  f'{self.note}({self.midi}):{ornaments}:{duration}:{self.offset}:{self.global_offset}'
+    if len(output.split(':')) != 5: 
+      print(f'output: {output}')
+    return output
+  
 
 
 class SigimsaeConverter:
@@ -104,7 +116,7 @@ def get_position_tuple(omr_text:str):
 
 
 def parse_omr_results(jeonggan: Jeonggan):
-  text = jeonggan.omr_text.replace(':5:5', ':5')
+  text = jeonggan.omr_text.replace(':5:5', ':5') # Hard-coded fix for a specific error
   notes = text.split(' ')
   notes = [x for x in notes if len(x)>2]
   text = ' '.join(notes)
@@ -134,7 +146,7 @@ def piece_to_score(piece):
   sigimsae_conv = SigimsaeConverter()
 
   for i, jeonggan in enumerate(piece.jeonggans):
-    if i == 1920:
+    if i == 1920: # In Yeominlak, this is where the tempo changes
       current_offset = i * dur_ratio
       new_note = mnote.Note(prev_pitch, quarterLength=current_offset - prev_offset)
       entire_notes.append(new_note)
@@ -194,6 +206,30 @@ def piece_to_score(piece):
   return score
 
 
+def parse_duration_and_offset(jeonggans):
+  prev_offset = 0 
+  prev_pitch = 0
+  prev_symbol = None
+  for i, jeonggan in enumerate(jeonggans):
+    for symbol in jeonggan.symbols:
+      symbol.global_offset = i + symbol.offset
+      if symbol.note == '-':
+        continue
+      if symbol.note == '같은음표':
+        symbol.midi = prev_pitch
+      if prev_symbol is not None:
+        prev_symbol.duration = symbol.global_offset - prev_offset
+      prev_offset = symbol.global_offset
+      prev_pitch = symbol.midi
+      prev_symbol = symbol
+  prev_symbol.duration = len(jeonggans) - prev_offset
+  return None
+
+def piece_to_txt(piece):
+  symbols_in_gaks = [','.join([str(symbol) for jeonggan in gak.jeonggans for symbol in jeonggan.symbols]) for gak in piece.gaks if not gak.is_jangdan]
+  symbols_in_gaks = '\n'.join(symbols_in_gaks)
+  return symbols_in_gaks
+
 def main():
   reader = JeongganboReader(run_omr=True)
 
@@ -204,7 +240,8 @@ def main():
                   'daegeum': (19,36),
                   'gayageum': (21,38),
                   'geomungo': (17,34),
-                  'piri': (23,40)}
+                  'piri': (23,40)
+                  }
 
   piece_by_inst = {}
 
@@ -217,14 +254,19 @@ def main():
     print(inst)
     for jeonggan in piece.jeonggans:
       out = parse_omr_results(jeonggan)
+    parse_duration_and_offset(piece.jeonggans)
 
 
   piece = piece_by_inst['haegeum']
   entire_score = stream.Score()
   inst_names_in_order = ['daegeum', 'piri', 'haegeum', 'ajaeng', 'gayageum', 'geomungo']
+  # inst_names_in_order = ['haegeum']
   for inst in inst_names_in_order:
     piece = piece_by_inst[inst]
     score = piece_to_score(piece)
+    piece_in_text = piece_to_txt(piece)
+    with open(f'{inst}_omr.txt', 'w') as f:
+      f.write(piece_in_text)
     # entire_score.append(score)
     entire_score.insert(0, score)
 

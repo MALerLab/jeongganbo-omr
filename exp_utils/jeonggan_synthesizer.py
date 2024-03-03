@@ -202,7 +202,7 @@ class JeongganSynthesizer:
       jng_infos.append(new_row)
       row_heights.append(max(row_height))
 
-    row_margin = randint(1, DEFAULT_MARGIN)
+    row_margin = randint(1, DEFAULT_MARGIN) if apply_noise else 3
     
     if sum(row_heights) > img_h - 2*row_margin:
       ignore = []

@@ -1,107 +1,11 @@
 import math
 from operator import itemgetter
+import re
+
 import cv2
 import numpy as np
 
-# only for experiment purpose
-def make_jeonggan_generator(reader, jngb):
-  jngb_gaks_w_jangdan = jngb[0].gaks
-  jngb_gaks = list(filter(lambda x: not x.is_jangdan, jngb_gaks_w_jangdan))
-  
-  for gak in jngb_gaks:
-    for jng in gak.jeonggans:
-      yield jng.img
-
-def make_jeonggan_list(reader, jngb):
-  jng_gen = make_jeonggan_generator(reader, jngb)
-  
-  return list(jng_gen)
-
-def read_jeongganbo(reader, infos):
-  name, start, num_page = infos['name'], infos['start'], infos['num_page']
-  jngb_paths = [f'pngs/{name}_pg-{str(idx + start).zfill(3)}.png' for idx in range(num_page)]
-  jngb = reader.parse_multiple_pages(jngb_paths)
-  
-  return jngb
-
-COLOR_DICT = {
-  'hwang_dd': (130, 130, 0),
-  'hwang_d': (200, 200, 0),
-  'hwang': (230, 230, 0),
-  'hwang_u': (255, 255, 90),
-  'hwang_uu': (255, 255, 150),
-
-  'joong_dd': (100, 0, 0),
-  'joong_d': (200, 0, 0),
-  'joong': (255, 0, 0),
-  'joong_u': (255, 128, 128),
-  'joong_uu': (255, 192, 192),
-
-  'lim_dd': (0, 100, 0), 
-  'lim_d': (0, 170, 0), 
-  'lim': (0, 230, 0), 
-  'lim_u': (100, 255, 100), 
-  'lim_uu': (182, 255, 182), 
-  
-  'mu_dd': (100, 0, 100), 
-  'mu_d': (130, 0, 130), 
-  'mu': (255, 0, 255), 
-  'mu_u': (255, 100, 255), 
-  'mu_uu': (255, 182, 255), 
-  
-  'nam_dd': (0, 0, 150), 
-  'nam_d': (0, 0, 200), 
-  'nam': (0, 0, 255), 
-  'nam_u': (80, 80, 255), 
-  'nam_uu': (130, 130, 235), 
-
-  'tae_dd': (110, 60, 0), 
-  'tae_d': (200, 132, 0), 
-  'tae': (255, 165, 0), 
-  'tae_u': (255, 192, 100), 
-  'tae_uu': (255, 218, 150), 
-}
-
-PNAME_LIST = [ '황', '대', '태', '협', '고', '중', '유', '임', '이', '남', '무', '응', '중청황', '청황', '배황', '하배황', '하하배황', '중청대', '청대', '배대', '하배대', '하하배대', '중청태', '청태', '배태', '하배태', '하하배태', '중청협', '청협', '배협', '하배협', '하하배협', '중청고', '청고', '배고', '하배고', '하하배고', '중청중', '청중', '배중', '하배중', '하하배중', '중청유', '청유', '배유', '하배유', '하하배유', '중청임', '청임', '배임', '하배임', '하하배임', '중청이', '청이', '배이', '하배이', '하하배이', '중청남', '청남', '배남', '하배남', '하하배남', '중청무', '청무', '배무', '하배무', '하하배무', '중청응', '청응', '배응', '하배응', '하하배응', '-']
-
-SPECIAL_CHAR_TO_NAME = {
-  '^': "니레",
-  'ㄷ': "나니로",
-  '(': "추성",
-  ')': "퇴성",
-}
-
-PNAME_EN_TO_KR = {
-  'go': '고',
-  'go_d': '배고',
-  'hwang': '황',
-  'hwang_dd': '하배황',
-  'hwang_ot': '황',
-  'hwang_u': '청황',
-  'hwang_uu': '중청황',
-  'hwnag_d': '배황',
-  'hyeop': '협',
-  'hyeop_u': '청협',
-  'joong': '중',
-  'joong_d': '배중',
-  'joong_dd': '하배중',
-  'joong_u': '청중',
-  'lim': '임',
-  'lim_d': '배임',
-  'lim_dd': '하배임',
-  'lim_u': '청임',
-  'mu': '무',
-  'mu_d': '배무',
-  'mu_u': '청무',
-  'nam': '남',
-  'nam_d': '배남',
-  'nam_dd': '하배남',
-  'nam_u': '청남',
-  'tae': '태',
-  'tae_d': '배태',
-  'tae_dd': '하배태',
-  'tae_u': '청태',
-}
+from .const import PNAME_EN_TO_KR, PNAME_KR_TO_EN
 
 class JeongganProcessor:
   def __init__(self, ptrn_size, threshold, mode):
@@ -147,7 +51,19 @@ class JeongganProcessor:
         'cols': [ jng_row_group[char_idx] if char_idx != None else char_idx for char_idx in col_indices]
       }
     
-    label_str = self.get_label(jng_aligned_result)
+    jng_aligned_result_format = jng_aligned_result
+    
+    for row_idx, row in enumerate(jng_aligned_result_format['rows']):
+      if not row:
+        continue
+      
+      for col_idx, col in enumerate(row['cols']):
+        if not col:
+          continue
+        
+        jng_aligned_result_format['rows'][row_idx]['cols'][col_idx] = col[-1]
+    
+    label_str = self.get_label(jng_aligned_result_format)
     
     return label_str, jng_aligned_result
   
@@ -641,7 +557,7 @@ class JeongganProcessor:
   @staticmethod
   def get_label(result_dict):
     # result_dict: { row_div: int, rows: list } 
-    # rows: [ { col_div: int, cols: [ (tl_x, tl_y, br_x, br_y, pname) ] } ]
+    # rows: [ { col_div: int, cols: [ pname ] } ]
     
     result_str = ''
     
@@ -651,7 +567,7 @@ class JeongganProcessor:
       if rows[0] == None or rows[0]['cols'][0] == None:
         return ''
       
-      *_, pname = rows[0]['cols'][0]
+      pname = rows[0]['cols'][0]
       return result_str + f'{PNAME_EN_TO_KR[pname]}' + ':' + str(5)
     
     if row_div == 3:
@@ -661,22 +577,18 @@ class JeongganProcessor:
         
         col_div, cols = itemgetter('col_div', 'cols')(row)
         
-        if col_div == 1:
-          if cols[0] == None:
-            continue
-          
-          *_, pname = cols[0]
+        if col_div == 1 and cols[0]:
+          pname = cols[0]
           result_str += PNAME_EN_TO_KR[pname] + ':' + str(2 + 3 * row_idx) + ' '
           
         else:
-          for col_idx, bbox in enumerate(cols):
-            if bbox == None:
+          for col_idx, pname in enumerate(cols):
+            if pname == None:
               continue
             
-            *_, pname = bbox
             result_str += PNAME_EN_TO_KR[pname] + ':' + str( 1 + (3 * row_idx) + (2 * col_idx) ) + ' '
       
-      return result_str
+      return result_str.strip()
     
     if row_div == 2:
       for row_idx, row in enumerate(rows):
@@ -685,21 +597,76 @@ class JeongganProcessor:
         
         col_div, cols = itemgetter('col_div', 'cols')(row)
         
-        if col_div == 1:
-          if cols[0] == None:
-            continue
+        if col_div == 1 and cols[0]:
           
-          *_, pname = cols[0]
+          pname = cols[0]
           result_str += PNAME_EN_TO_KR[pname] + ':' + str(10 + row_idx) + ' '
           
         else:
-          for col_idx, bbox in enumerate(cols):
-            if bbox == None:
+          for col_idx, pname in enumerate(cols):
+            if pname == None:
               continue
             
-            *_, pname = bbox
             result_str += PNAME_EN_TO_KR[pname] + ':' + str( 12 + (2*row_idx) + col_idx ) + ' '
       
-      return result_str
+      return result_str.strip()
     
-    return result_str
+    return result_str.strip()
+  
+  @classmethod
+  def label2dict(cls, label: str):
+    pattern = r'([^_\s:]+|_+[^_\s:]+|[^:]\d+|[-])'
+    
+    notes = label.split()
+    
+    token_groups = []
+    
+    for note in notes:
+      findings = re.findall(pattern, note)
+      token_groups.append( findings )
+    
+    row_div = cls.get_row_div( list( map(lambda g: int(g[-1]), token_groups) ) )
+    rows = [ { 'col_div': 0, 'cols': [] } for _ in range(row_div) ]
+    
+    for group in token_groups:
+      pname, *_, pos  = group
+      row_idx = cls.pos2colIdx(pos, row_div)
+      
+      rows[row_idx]['col_div'] += 1
+      rows[row_idx]['cols'].append( PNAME_KR_TO_EN[pname] )
+    
+    return {
+      'row_div': row_div,
+      'rows': rows
+    }
+  
+  @staticmethod
+  def get_row_div(poses):
+    row_div = 0
+    
+    if len(poses) == 1 and poses[0] == 5:
+      row_div = 1
+      
+    elif sum([ 1 if pos >= 10 else 0 for pos in poses ]) == len(poses):
+      row_div = 2
+
+    else:
+      row_div = 3
+    
+    return row_div
+  
+  @staticmethod
+  def pos2colIdx(pos, row_div):
+    pos = int(pos)
+    
+    if row_div == 1:
+      return 0
+    
+    elif row_div == 3:
+      return (pos - 1) // row_div
+    
+    else:
+      if pos < 12:
+        return (pos - 10)
+      else:
+        return (pos - 12) // row_div

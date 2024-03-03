@@ -1,0 +1,660 @@
+import re
+from random import randint, choice, uniform
+from operator import itemgetter
+
+import cv2
+import numpy as np
+
+from .const import NAME_EN_TO_KR, NAME_KR_TO_EN, NOTE_W_DUR_EN_SET, SYMBOL_W_DUR_EN_LIST, SYMBOL_WO_DUR_EN_LIST, SYMBOL_WO_DUR_ADD_EN_LIST
+
+INIT_WIDTH = 100
+WIDTH_NOISE_SIG = 3.34
+WIDTH_NOISE_MIN = -10
+WIDTH_NOISE_MAX = 13
+
+INIT_RATIO = 1.4
+RATIO_NOISE_SIG = 0.3
+RATIO_NOISE_MIN = -0.7
+RATIO_NOISE_MAX = 1.0
+
+DEFAULT_MARGIN = 6
+
+MARK_HEIGHT = 26
+MARK_WIDTHS = {
+  'conti': 21,
+  'pause': 27 # 34
+}
+
+OCTAVE_WIDTH = 13
+OCTAVE_RANGE = 6
+
+# PITCH_ORDER: 'hwang', 'dae', 'tae', 'hyeop', 'go', 'joong', 'yoo', 'lim', 'ee', 'nam', 'mu', 'eung'
+PITCH_ORDER = [
+                                                                      'lim_ddd',  None,     None,       None,    None,
+  'hwang_dd', None, 'tae_dd', 'hyeop_dd',  None,   'joong_dd', None,  'lim_dd',  'ee_dd',  'nam_dd',   'mu_dd',  None,
+  'hwang_d',  None, 'tae_d',  'hyeop_d',  'go_d',  'joong_d',  None,  'lim_d',   None,     'nam_d',    'mu_d',   'eung_d',
+  'hwang',    None, 'tae',    'hyeop',    'go',    'joong',    None,  'lim',     'ee',     'nam',      'mu',     'eung',
+  'hwang_u',  None, 'tae_u',  'hyeop_u',  'go_u',  'joong_u',  None,  'lim_u',   None,     'nam_u',    'mu_u',   None,
+  'hwang_uu'
+]
+
+class JeongganSynthesizer:
+  def __init__(self, img_path_dict):
+    self.img_path_dict = img_path_dict
+    self.img_dict = {}
+    
+    for key, path in img_path_dict.items():
+      if isinstance(path, list):
+        imgs = [ cv2.imread(p, cv2.IMREAD_UNCHANGED) for p in path ]
+        self.img_dict[key] = imgs
+        continue
+        
+      self.img_dict[key] = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+  
+  def __call__(self):
+    img_w, img_h = self.get_size()
+    img = self.get_blank(img_w, img_h)
+    jng_dict, label = self.get_label_dict()
+    
+    jng_img = self.generate_image_by_dict(img, jng_dict)
+    
+    return label, jng_img
+  
+  def generate_single_data(self, range_limit=True):
+    img_w, img_h = self.get_size()
+    img = self.get_blank(img_w, img_h)
+    
+    jng_dict, label = self.get_label_dict(range_limit=range_limit)
+    
+    jng_img = self.generate_image_by_dict(img, jng_dict)
+    
+    return label, img_w, img_h
+  
+  # label generator
+  @classmethod
+  def get_label_dict(cls, div=None, range_limit=True, ornaments=True):
+    pitch_range = cls.get_pitch_range()
+    
+    if not range_limit:
+      pitch_range = list(filter(None, PITCH_ORDER))
+    
+    jng_dict = cls.get_jng_dict( pitch_range, ornaments=ornaments )
+    
+    label = cls.dict2label(jng_dict)
+    
+    return jng_dict, label
+    
+  @staticmethod
+  def get_pitch_range():
+    num_pitch = len(PITCH_ORDER)
+    
+    center = randint(0, num_pitch - 1)
+    offset = OCTAVE_WIDTH // 2
+    
+    if center < offset:
+      res = PITCH_ORDER[:OCTAVE_WIDTH]
+      
+    elif center > num_pitch - offset:
+      res = PITCH_ORDER[num_pitch-OCTAVE_WIDTH:]
+    
+    else:
+      res = PITCH_ORDER[center-offset:center+offset+1]
+    
+    return list(filter(None, res))
+
+  @staticmethod
+  def get_jng_dict(plist, div=None, ornaments=True):
+    plist = plist + ['conti', 'pause'] + SYMBOL_W_DUR_EN_LIST
+    sym_set = set(SYMBOL_WO_DUR_EN_LIST)
+    
+    row_div = div if div else randint(1, 3)
+    
+    res = {
+      'row_div': row_div,
+      'rows': []
+    }
+    
+    for _ in range(row_div):
+      col_div = randint(1, 2) if row_div > 1 else 1
+      cols = []
+      
+      for col_idx in range(col_div):
+        group = choice(plist)
+        
+        if ornaments and group != 'pause' and randint(1, 10) > 6: # add symbol 40% chance
+          sym_set_cp = sym_set.copy()
+          
+          if group in SYMBOL_W_DUR_EN_LIST:
+            sym_set_cp -= {'nanina', 'naneuna'}
+          
+          if col_div > 1 and col_idx < 1:
+            sym_set_cp -= { 'flow', 'push' }
+          
+          sym = choice(list(sym_set_cp))
+          
+          group = [group] + [sym]
+        
+        cols.append( group )
+      
+      res['rows'].append({
+        'col_div': col_div,
+        'cols': cols
+      })
+    
+    return res
+  
+  # image generation
+  def generate_image_by_label(self, label, width, height):
+    jng_dict = self.label2dict(label)
+    
+    img = self.get_blank(width, height)
+    
+    jng_img = self.generate_image_by_dict(img, jng_dict)
+    
+    return jng_img
+    
+  def generate_image_by_dict(self, img, dict, apply_noise=True):
+    img_h, img_w = img.shape[:2]
+    
+    jng_arr = [ row['cols'] for row in dict['rows'] ]
+    row_div = len(jng_arr)
+
+    jng_infos = []
+    row_heights = []
+
+    for row_idx, row in enumerate(jng_arr):
+      new_row = []
+      row_height = []
+      
+      for group in row:
+        if not isinstance(group, list):
+          group = [group]
+        
+        new_group = []
+        
+        for el_idx, el_name in enumerate(group):
+          el_name_cp = el_name
+          
+          if el_name in SYMBOL_WO_DUR_ADD_EN_LIST:
+            el_name_cp = el_name_cp.split('/')[0]
+          
+          el_img = self.img_dict[el_name_cp].copy()
+          
+          if isinstance(el_img, list):
+            el_img = choice(el_img).copy()
+          
+          el_img_dim = list(el_img.shape[:2])
+          
+          if el_name in SYMBOL_WO_DUR_ADD_EN_LIST:
+            el_img_dim = [ ln*2 for ln in el_img_dim ]
+          
+          if el_name == 'conti':
+            el_img_dim[0] = MARK_HEIGHT
+          
+          new_group.append( [ el_name, el_img_dim, el_img ])
+          row_height.append(el_img_dim[0])
+        
+        new_row.append( new_group )
+      
+      jng_infos.append(new_row)
+      row_heights.append(max(row_height))
+
+    row_margin = randint(1, DEFAULT_MARGIN)
+    
+    if sum(row_heights) > img_h - 2*row_margin:
+      ignore = []
+      valid = []
+      
+      for rh in row_heights:
+        if rh < 10:
+          ignore.append(rh)
+        else:
+          valid.append(rh * 1.2)
+      
+      h_size_ratio = (img_h - 2*row_margin - sum(ignore))/sum(valid)
+      
+      new_jng_infos = []
+      new_row_heights = []
+      
+      for row in jng_infos:
+        new_row = []
+        new_row_height = []
+        
+        for group in row:
+          new_group = []
+          
+          for el_name, el_img_dim, el_img in group:
+          
+            if el_img_dim[0] > 9:
+              el_img_dim[0] = int(el_img_dim[0] * h_size_ratio)
+            
+            if el_name == 'pause':
+              el_img_dim[1] = int(el_img_dim[1] * h_size_ratio)
+            
+            new_group.append([el_name, el_img_dim, el_img])
+            new_row_height.append(el_img_dim[0])
+          
+          new_row.append(new_group)
+        
+        new_jng_infos.append(new_row)
+        new_row_heights.append(max(new_row_height))
+      
+      jng_infos = new_jng_infos
+      row_heights = new_row_heights
+      
+      del new_jng_infos
+      del new_row_heights
+
+    row_gap = int((img_h - 2*row_margin - sum(row_heights)) / (row_div + 1))
+    row_template = [ row_margin + sum(row_heights[:idx]) + (idx + 1) * row_gap for idx in range(row_div) ]
+
+    col_margin = 0 # randint(0, DEFAULT_MARGIN)
+    
+    for row_idx, row in enumerate(jng_infos):
+      col_div = len(row)
+      row_width = sum([ sum([ el[1][1] for el in group ]) for group in row ])
+      
+      if row_width > img_w - 2*col_margin:
+        ignore = []
+        valid = []
+        
+        for group in row:
+          for el_idx, (el_name, el_img_dim, el_img) in enumerate(group):
+            if el_idx > 0:
+              ignore.append(el_img_dim[1])
+            else:
+              valid.append(el_img_dim[1] * 1.1)
+        
+        w_size_ratio = (img_w - 2*col_margin - sum(ignore))/sum(valid)
+        
+        new_row = []
+        
+        for group in row:
+          
+          new_group = []
+          
+          for el_idx, (el_name, el_img_dim, el_img) in enumerate(group):
+            
+            if el_idx < 1: 
+              el_img_dim[1] = int(el_img_dim[1] * w_size_ratio)
+              
+            if el_name == 'pause':
+              el_img_dim[0] = int(el_img_dim[0] * w_size_ratio)
+            
+            new_group.append([el_name, el_img_dim, el_img])
+          
+          new_row.append(new_group)
+        
+        row = new_row
+        del new_row
+      
+      notes = [] 
+      
+      for group in row:
+        new_group = []
+        
+        for el_idx, (el_name, el_img_dim, el_img) in enumerate(group):
+          if any([tar != src for tar, src in zip(el_img_dim, el_img.shape[:2])]):
+            if el_name == 'conti':
+              el_img = self.make_mark(el_img, el_img_dim[0])
+            elif el_idx == 0:
+              el_img = cv2.resize(el_img, dsize=el_img_dim[-1::-1])
+          
+          new_group.append([el_img, el_name])
+        
+        notes.append(new_group)
+      
+      # group_width_list = [ sum([ el[0].shape[1] for el in group ]) for group in notes ]
+      # row_width = sum( group_width_list )
+      # col_gap = (img_w - 2*col_margin - row_width) // (col_div + 1)
+      # col_template = [ col_margin + sum(group_width_list[:idx]) + (idx + 1) * col_gap for idx in range(col_div) ]
+      
+      row_width = sum([ group[0][0].shape[1] for group in notes ])
+      col_gap = (img_w - 2*col_margin - row_width) // (col_div + 1)
+      col_template = [ col_margin + sum([ group[0][0].shape[1] for group in notes[:idx] ]) + (idx + 1) * col_gap for idx in range(col_div) ]
+      
+      for col_idx, group in enumerate(notes[:]):
+        pos_x = col_template[col_idx]
+        note_width = group[0][0].shape[1]
+        sym_width = sum([ el[0].shape[1] for el in group[1:] ])
+        
+        group_width = note_width + sym_width
+        
+        if len(notes) > 1 and col_idx < 1 and pos_x - sym_width < 0:
+          if len(notes[col_idx + 1]) < 2 and group_width < col_template[col_idx + 1] + 2:
+            col_template[col_idx] = sym_width 
+          
+          else:
+            rs_width = int ( (col_template[col_idx + 1] - sym_width) * 0.9 )
+            rs_ratio = rs_width / note_width
+            if rs_ratio < 1:
+              rs_height = group[0][0].shape[0] # int( group[0][0].shape[0] * rs_ratio )
+              new_note_img = cv2.resize(group[0][0], dsize=(rs_width, rs_height))
+              
+              new_group = [[new_note_img, group[0][1]], *group[1:]]
+              notes[col_idx] = new_group
+              
+              col_template[col_idx] = sym_width
+          
+        elif col_idx > 0 and pos_x + group_width > img_w:
+          if len(notes[col_idx - 1]) < 2 and col_template[col_idx - 1] + notes[col_idx - 1][0][0].shape[1] + group_width < img_w:
+            col_template[col_idx] = col_template[col_idx - 1] + notes[col_idx - 1][0][0].shape[1]
+          else:
+            rs_width = int((img_w - col_template[col_idx - 1] - sym_width) * 0.8)
+            # rs_width = int( (img_w - pos_x - group_width) * 0.9 )
+            rs_ratio = rs_width / note_width
+            if rs_ratio < 1:
+              rs_height = int( group[0][0].shape[0] * rs_ratio )
+              new_note_img = cv2.resize(group[0][0], dsize=(rs_width, rs_height))
+            
+              new_group = [[new_note_img, group[0][1]], *group[1:]]
+              notes[col_idx] = new_group
+              col_template[col_idx] = col_template[col_idx - 1] + 1
+      
+      for col_idx, group in enumerate(notes):
+        cur_pos_x = col_template[col_idx]
+        
+        for el_idx, (el_img, el_name) in enumerate(group):
+          if el_name in SYMBOL_WO_DUR_ADD_EN_LIST:
+            min_margin = 4
+            
+            for split_idx, split_name in enumerate(el_name.split('/')):
+              el_img = self.img_dict[split_name].copy()
+              
+              pos_x = col_template[col_idx]
+              pos_y = row_template[row_idx] + row_heights[row_idx]//2 - el_img.shape[0]//2  
+              
+              if split_idx:
+                pos_x += group[0][0].shape[1] + min_margin
+              else:
+                pos_x -= el_img.shape[1] + min_margin
+              
+              el_img = self.remove_background(el_img)
+              img = self.insert_img(img, el_img, pos_x, pos_y)
+            
+            cur_pos_x = pos_x
+            continue
+          
+          pos_x = cur_pos_x
+          pos_y = row_template[row_idx]
+          
+          if row_heights[row_idx] != el_img.shape[0]:
+            pos_y += row_heights[row_idx]//2 - el_img.shape[0]//2
+            
+          if el_name in {'flow', 'push'}:
+            pos_y += int(group[0][0].shape[0] * 0.4)
+          
+          if el_idx > 0:
+            min_margin = 0
+            # pos_y += int(group[0][0].shape[0] * 0.3)
+            
+            if col_div > 1 and col_idx < 1:
+              pos_x -= el_img.shape[1] + min_margin
+              
+              # if pos_x < 0:
+              #   resize_width = int((el_img.shape[1] + pos_x) * 0.8)
+              #   # resize_ratio = resize_width / el_img.shape[1]
+              #   el_img = cv2.resize(el_img, dsize=(resize_width, el_img.shape[0]), interpolation=None)
+              #   pos_x = 0
+              
+              # if len(group[1:]) < 2 and col_template[col_idx] > el_img.shape[1]:
+              #   pos_x = col_template[col_idx] // 2 - el_img.shape[1]//2
+              
+            # elif col_idx > 0:
+              # pos_x += group[0][0].shape[1] + min_margin
+              
+              # if pos_x + el_img.shape[1] > img_w:
+              #   resize_width = int((img_w - pos_x) * 0.8)
+              #   resize_ratio = resize_width / el_img.shape[1]
+              #   print(resize_width)
+              #   el_img = cv2.resize(el_img, dsize=(resize_width, el_img.shape[0]), interpolation=None)
+              
+              # if len(group[1:]) < 2 and pos_x + el_img.shape[1] < img_w:
+              #   pos_x += (img_w - pos_x)//2 - el_img.shape[1]//2
+            
+            elif len(notes) < 2 :
+              if el_idx > 1 and pos_x + el_img.shape[1] > img_w:
+                rs_width = img_w - pos_x
+                rs_ratio = rs_width / el_img.shape[1]
+                rs_height = int( rs_ratio * el_img.shape[0] )
+                el_img = cv2.resize(el_img, dsize=(rs_width, rs_height))
+              
+              # if len(group[1:]) < 1:
+              #   pos_x += (img_w - pos_x)//2 - el_img.shape[1]//2
+          
+          if col_div > 1 and col_idx < 1:
+            if el_idx < 1:
+              cur_pos_x = pos_x
+            else:
+              cur_pos_x = pos_x - el_img.shape[1]
+          else:
+            cur_pos_x = pos_x + el_img.shape[1]
+          
+          if el_idx > 0 and len(group[1:]) < 2:
+            if col_div > 1 and col_idx < 1:
+              pos_x = col_template[col_idx] // 2 - el_img.shape[1]//2
+            else:
+              pos_x += (img_w - pos_x)//2 - el_img.shape[1]//2
+            
+          if apply_noise:
+            pos_x += randint(-2, 2)
+            pos_y += randint(-2, 2)
+          
+          if apply_noise:
+            rand_ratio = uniform(0.9, 1.1)
+            el_img = self.resize_img_by_height(el_img, round(el_img.shape[0] * rand_ratio))
+        
+          el_img = self.remove_background(el_img)
+        
+          img = self.insert_img(img, el_img, pos_x, pos_y)
+    
+    return img
+  
+  @staticmethod
+  def clamp(val, _min, _max):
+    return min(_max, max(_min, val))
+
+  @classmethod
+  def get_width(cls):
+    noise = cls.clamp( round(np.random.normal(0, WIDTH_NOISE_SIG)), WIDTH_NOISE_MIN, WIDTH_NOISE_MAX )
+    return INIT_WIDTH + noise
+
+  @classmethod
+  def get_ratio(cls, min_ratio=None): 
+    min_noise = (min_ratio - INIT_RATIO) if min_ratio else RATIO_NOISE_MIN
+    noise = round( cls.clamp( np.random.normal(0, RATIO_NOISE_SIG), min_noise, RATIO_NOISE_MAX ), 1 )
+    return INIT_RATIO + noise 
+
+  @classmethod
+  def get_size(cls, min_ratio=None):
+    width = cls.get_width()
+    ratio = cls.get_ratio( min_ratio=min_ratio ) 
+    
+    return width, round(width * ratio)
+  
+  @staticmethod
+  def remove_background(img, crop=True):
+    img = cv2.cvtColor(img, cv2.COLOR_RGB2RGBA)
+    
+    img_grey = cv2.cvtColor(img, cv2.COLOR_RGBA2GRAY)
+    
+    y, x = np.where(img_grey > 250)
+    
+    img_cp = img.copy()
+    
+    img_cp[y, x] = np.full(4, 0, dtype=np.uint8)
+    
+    return img_cp
+
+  @staticmethod
+  def get_blank(width, height, bg='white'):
+    blank = np.zeros((height, width, 4), dtype=np.uint8)
+    
+    if bg == 'white':
+      blank[:, :] = np.array([255, 255, 255, 255], dtype=np.uint8)
+    elif bg == 'black':
+      blank[:, :] = np.array([0, 0, 0, 255], dtype=np.uint8)
+    
+    return blank
+  
+  @staticmethod
+  def insert_img(src, insert, x, y):
+    h, w = insert.shape[:2]
+    
+    x_start = min(max(0, x), src.shape[1])
+    y_start = min(max(0, y), src.shape[0])
+    
+    x_end = min(src.shape[1], x+w) # clamp
+    y_end = min(src.shape[0], y+h) # clamp
+    
+    x_crop_start = max(-x, 0)
+    y_crop_start = max(-y, 0)
+    
+    x_crop_end = min(src.shape[1]-x, insert.shape[1]) if x < src.shape[1] else 0
+    y_crop_end = min(src.shape[0]-y, insert.shape[0]) if y < src.shape[0] else 0
+    
+    insert = insert[y_crop_start:y_crop_end, x_crop_start:x_crop_end]
+    
+    # normalize alpha to 0 ~ 1
+    src_alpha = src[y_start:y_end, x_start:x_end, 3] / 255.0
+    ins_alpha = insert[:, :, 3] / 255.0
+
+    # blend src and insert channel by channel
+    for ch in range(0, 3):
+      src[y_start:y_end, x_start:x_end, ch] = ins_alpha * insert[:, :, ch] + \
+                                  src_alpha * src[y_start:y_end, x_start:x_end, ch] * (1 - ins_alpha)
+
+    # denoramlize alpha to 0 ~ 255
+    src[y_start:y_end, x_start:x_end, 3] = (1 - (1 - ins_alpha) * (1 - src_alpha)) * 255
+    
+    return src
+
+  @staticmethod
+  def resize_img_by_height(img, target_height):
+    og_h, og_w = img.shape[:2]
+    
+    resize_ratio = target_height / og_h
+    resize_width = round(og_w * resize_ratio)
+    
+    return cv2.resize(img, dsize=(resize_width, target_height), interpolation=None)
+  
+  @classmethod
+  def make_mark(cls, img, height):
+    bg = cls.get_blank(img.shape[1], height)
+    
+    return cls.insert_img(bg, img, 0, MARK_HEIGHT//2 - img.shape[0]//2)
+  
+  @staticmethod
+  def dict2label(result_dict):
+    # result_dict: { row_div: int, rows: list } 
+    # rows: [ { col_div: int, cols: [ group ] } ]
+    # group: str or list
+    
+    def cvt_name(g):
+      if isinstance(g, list):
+        return '_'.join([ NAME_EN_TO_KR[el] for el in g ])
+      
+      return NAME_EN_TO_KR[g]
+    
+    result_str = ''
+    
+    row_div, rows = itemgetter('row_div', 'rows')(result_dict)
+    
+    if row_div == 1:
+      group = rows[0]['cols'][0]
+      group = cvt_name(group)
+      
+      result_str += f'{group}' + ':' + str(5)
+    
+    elif row_div == 3:
+      for row_idx, row in enumerate(rows):
+        col_div, cols = itemgetter('col_div', 'cols')(row)
+        
+        if col_div == 1:
+          group = cols[0]
+          group = cvt_name(group)
+          result_str += group + ':' + str(2 + 3 * row_idx) + ' '
+          
+        else:
+          for col_idx, group in enumerate(cols):
+            group = cvt_name(group)
+            result_str += group + ':' + str( 1 + (3 * row_idx) + (2 * col_idx) ) + ' '
+    
+    elif row_div == 2:
+      for row_idx, row in enumerate(rows):
+        col_div, cols = itemgetter('col_div', 'cols')(row)
+        
+        if col_div == 1:
+          group = cols[0]
+          group = cvt_name(group)
+          result_str += group + ':' + str(10 + row_idx) + ' '
+          
+        else:
+          for col_idx, group in enumerate(cols):
+            group = cvt_name(group)
+            result_str += group + ':' + str( 12 + (2*row_idx) + col_idx ) + ' '
+    
+    return result_str.strip()
+  
+  @classmethod
+  def label2dict(cls, label: str):
+    pattern = r'([^_\s:]+|_+[^_\s:]+|[^:]\d+|[-])'
+    
+    notes = label.split()
+    
+    token_groups = []
+    
+    for note in notes:
+      findings = re.findall(pattern, note)
+      token_groups.append( findings )
+    
+    row_div = cls.get_row_div( list( map(lambda g: int(g[-1]), token_groups) ) )
+    rows = [ { 'col_div': 0, 'cols': [] } for _ in range(row_div) ]
+    
+    for group in token_groups:
+      *group, pos  = group
+      row_idx = cls.pos2colIdx(pos, row_div)
+      
+      group = [ NAME_KR_TO_EN[el.replace('_', '')] for el in group ]
+      
+      if len(group) < 2:
+        group = group[0]
+      
+      rows[row_idx]['col_div'] += 1
+      rows[row_idx]['cols'].append( group )
+    
+    return {
+      'row_div': row_div,
+      'rows': rows
+    }
+  
+  @staticmethod
+  def get_row_div(poses):
+    row_div = 0
+    
+    if len(poses) == 1 and poses[0] == 5:
+      row_div = 1
+      
+    elif sum([ 1 if pos >= 10 else 0 for pos in poses ]) == len(poses):
+      row_div = 2
+
+    else:
+      row_div = 3
+    
+    return row_div
+  
+  @staticmethod
+  def pos2colIdx(pos, row_div):
+    pos = int(pos)
+    
+    if row_div == 1:
+      return 0
+    
+    elif row_div == 3:
+      return (pos - 1) // row_div
+    
+    else:
+      if pos < 12:
+        return (pos - 10)
+      else:
+        return (pos - 12) // row_div

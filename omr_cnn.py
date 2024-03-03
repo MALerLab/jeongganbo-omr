@@ -1,14 +1,25 @@
-import torch
-import torch.nn as nn
+import sys, getopt
 import random
+import re
+from pathlib import Path
+from operator import itemgetter
+import csv
 
-from torch.utils.data import DataLoader
-from torchvision import transforms
+from omegaconf import OmegaConf
 from tqdm.auto import tqdm
 import pandas as pd
 import cv2
-import re
-from pathlib import Path
+import numpy as np
+
+import wandb
+
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+from torchvision import transforms
+
+from exp_utils import JeongganSynthesizer, PNAME_EN_LIST, SYMBOL_W_DUR_EN_LIST
+
 
 class RandomBoundaryDrop:
   def __init__(self, amount=3) -> None:
@@ -79,9 +90,10 @@ class Tokenizer:
     return ''.join([self.vocab[idx] for idx in labels])
 
 class Dataset:
-  def __init__(self, csv_path, img_dir, is_valid=False) -> None:
+  def __init__(self, csv_path, img_path_dict, is_valid=False) -> None:
     self.df = pd.read_csv(csv_path)
-    self.img_dir = Path(img_dir)
+    self.img_path_dict = img_path_dict
+    self.jng_synth = JeongganSynthesizer(img_path_dict)
     self.is_valid = is_valid
 
     if self.is_valid:
@@ -109,11 +121,16 @@ class Dataset:
   
   def __getitem__(self, idx):
     row = self.df.iloc[idx]
-    img = cv2.imread( str(self.img_dir / row['filename']))
-    annotations = row['label']
+    annotations, width, height = itemgetter('label', 'width', 'height')(row)
+    img = None
+    
+    img = self.jng_synth.generate_image_by_label(annotations, width, height)
+    
+    img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
     img = self.transform(img)
     return img, self.tokenizer(annotations)
-  
+    
+
 def pad_collate(raw_batch):
   # raw batch is a list of tuples (img, annotation)
   # img is torch tensor with shape (1, H, W)
@@ -140,7 +157,6 @@ def pad_collate(raw_batch):
   return img_batch, label_batch[:, :-1], label_batch[:, 1:]
 
 
-
 class ConvBlock(nn.Module):
   def __init__(self, in_channels, out_channels, kernel_size, stride, padding):
     super().__init__()
@@ -162,7 +178,7 @@ class ContextAttention(nn.Module):
     self.num_head = num_head
 
     if size % num_head != 0:
-        raise ValueError("size must be dividable by num_head", size, num_head)
+      raise ValueError("size must be dividable by num_head", size, num_head)
     self.head_size = int(size/num_head)
     self.context_vector = torch.nn.Parameter(torch.Tensor(num_head, self.head_size, 1))
     nn.init.uniform_(self.context_vector, a=-1, b=1)
@@ -195,41 +211,65 @@ class ContextAttention(nn.Module):
     sum_attention = torch.sum(attention, dim=1)
     return sum_attention
 
+
+class QKVAttention(nn.Module):
+  def __init__(self, hidden_size, num_head=4, dropout=0.1):
+    super().__init__()
+    
+    self.kv = nn.Linear(hidden_size, hidden_size*2)
+    self.q = nn.Linear(hidden_size, hidden_size)
+    self.num_head = num_head
+    self.mlp = nn.Sequential(
+      nn.Linear(hidden_size, hidden_size * 4),
+      nn.GELU(),
+      nn.Dropout(dropout),
+      nn.Linear(hidden_size * 4, hidden_size),
+    )    
+    
+  def forward(self, _q, _kv):
+    kv = self.kv(_kv)
+    k, v = torch.split(kv, kv.shape[-1]//2, dim=-1)
+    q = self.q(_q)
+    attention_score = torch.bmm(q, k.permute(0,2,1))
+    attention_score = torch.softmax(attention_score, dim=-1)
+    attention = torch.bmm(attention_score, v)
+    attention = self.mlp(attention)
+    
+    return attention
+  
+
+
 class OMRModel(nn.Module):
   def __init__(self, hidden_size, vocab_size, num_gru_layers=2):
     super().__init__()
 
     self.layers = nn.Sequential(
-          ConvBlock(1, hidden_size//4, 3, 1, 1),
-          nn.MaxPool2d(2, 2),
-          ConvBlock(hidden_size//4, hidden_size//4, 3, 1, 1),
-          nn.MaxPool2d(2, 2),
-          ConvBlock(hidden_size//4, hidden_size//2, 3, 1, 1),
-          nn.MaxPool2d(2, 2),
-          ConvBlock(hidden_size//2, hidden_size//2, 3, 1, 1),
-          nn.MaxPool2d(2, 2),
-          ConvBlock(hidden_size//2, hidden_size, 3, 1, 1),
-          nn.MaxPool2d(2, 2),
-          ConvBlock(hidden_size, hidden_size, 3, 1, 1),
-    )
-    
+      ConvBlock(1, hidden_size//4, 3, 1, 1),
+      nn.MaxPool2d(2, 2),
+      ConvBlock(hidden_size//4, hidden_size//4, 3, 1, 1),
+      nn.MaxPool2d(2, 2),
+      ConvBlock(hidden_size//4, hidden_size//2, 3, 1, 1),
+      nn.MaxPool2d(2, 2),
+      ConvBlock(hidden_size//2, hidden_size//2, 3, 1, 1),
+      nn.MaxPool2d(2, 2),
+      ConvBlock(hidden_size//2, hidden_size, 3, 1, 1),
+      nn.MaxPool2d(2, 2),
+      ConvBlock(hidden_size, hidden_size, 3, 1, 1),
+
     self.context_attention = ContextAttention(hidden_size, 4)
     self.cont2hidden = nn.Linear(hidden_size, hidden_size*num_gru_layers)
     self.cnn_gru = nn.GRU(hidden_size, hidden_size//2, 1, batch_first=True, dropout = 0.2, bidirectional=True)
 
-    self.kv = nn.Linear(hidden_size, hidden_size*2)
-    self.q = nn.Linear(hidden_size, hidden_size)
-    self.num_head = 4
-
     self.emb = nn.Embedding(vocab_size, hidden_size)
     self.gru = nn.GRU(hidden_size, hidden_size, num_gru_layers, batch_first=True, dropout = 0.2)
-    self.mlp = nn.Sequential(
-        nn.Linear(hidden_size, hidden_size * 4),
-        nn.GELU(),
-        nn.Linear(hidden_size * 4, hidden_size),
-    )
 
-    self.final_gru = nn.GRU(hidden_size * 2, hidden_size*2, 1, batch_first=True)
+    self.attn_layer1 = QKVAttention(hidden_size)
+    self.final_gru1 = nn.GRU(hidden_size * 2, hidden_size, 1, batch_first=True)
+
+    self.attn_layer2 = QKVAttention(hidden_size)
+    self.final_gru2 = nn.GRU(hidden_size * 2, hidden_size*2, 1, batch_first=True)
+    
+
     self.proj = nn.Linear(hidden_size*2, vocab_size)
 
   def run_img_cnn(self, x):
@@ -246,58 +286,61 @@ class OMRModel(nn.Module):
 
     return x, context_vector
 
-  
   def forward(self, x, y):
     x, context_vector = self.run_img_cnn(x)
     y = self.emb(y)
     gru_out, _ = self.gru(y, context_vector)
-    kv = self.kv(x)
-    k, v = torch.split(kv, kv.shape[-1]//2, dim=-1)
-    q = self.q(gru_out)
-    attention_score = torch.bmm(q, k.permute(0,2,1))
-    attention_score = torch.softmax(attention_score, dim=-1)
-
-    attention = torch.bmm(attention_score, v)
-    attention = self.mlp(attention)
-
+    attention = self.attn_layer1(gru_out, x)
     cat_out = torch.cat([gru_out, attention], dim=-1)
-    cat_out, _ = self.final_gru(cat_out)
+    cat_out, _ = self.final_gru1(cat_out)
+    
+    attention = self.attn_layer2(cat_out, x)
+    cat_out = torch.cat([cat_out, attention], dim=-1)
+    cat_out, _ = self.final_gru2(cat_out)
+
     logit = self.proj(cat_out)
 
     return logit
 
   @torch.inference_mode()  
-  def inference(self, x):
-    assert x.shape[0] == 1 # batch size must be 1
+  def inference(self, x, max_len=None, batch=True):
+    # assert x.shape[0] == 1 # batch size must be 1
 
     x, last_hidden = self.run_img_cnn(x)
-    kv = self.kv(x)
-    k, v = torch.split(kv, kv.shape[-1]//2, dim=-1)
-
-    y = torch.ones((1, 1), dtype=torch.long).to(x.device)
-    outputs = []
-    final_gru_last_hidden = None
-    for _ in range(100):
+    
+    y = torch.ones((x.shape[0], 1), dtype=torch.long).to(x.device)
+    outputs = torch.ones_like(y) if batch else []
+    
+    final_gru_last_hidden1 = None
+    final_gru_last_hidden2 = None
+    
+    max_len = max_len if max_len else 100
+    
+    for _ in range(max_len):
       y = self.emb(y)
       gru_out, last_hidden = self.gru(y, last_hidden)
-      q = self.q(gru_out)
-      attention_score = torch.bmm(q, k.permute(0,2,1))
-      attention_score = torch.softmax(attention_score, dim=-1)
-
-      attention = torch.bmm(attention_score, v)
-      attention = self.mlp(attention)
-
+      
+      attention = self.attn_layer1(gru_out, x)
       cat_out = torch.cat([gru_out, attention], dim=-1)
-      cat_out, final_gru_last_hidden = self.final_gru(cat_out, final_gru_last_hidden)        
+      cat_out, final_gru_last_hidden1 = self.final_gru1(cat_out, final_gru_last_hidden1)        
+      
+      attention = self.attn_layer2(cat_out, x)
+      cat_out = torch.cat([cat_out, attention], dim=-1)
+      cat_out, final_gru_last_hidden2 = self.final_gru2(cat_out, final_gru_last_hidden2)
 
       logit = self.proj(cat_out)
       y = torch.argmax(logit, dim=-1)
-      if y == 2:
-        break
-      outputs.append(y.item())
+      
+      if batch:
+        outputs = torch.cat([outputs, y], dim=1) 
+      else:
+        if y.item() == 2:
+          break
+        outputs.append(y.item())
+    
     return outputs
 
-  
+
 
 class Inferencer:
   def __init__(self, vocab_txt_fn='tokenizer.txt', model_weights='omr_model_best.pt'):
@@ -317,18 +360,22 @@ class Inferencer:
       img = cv2.imread(img)
     img = self.transform(img)
     img = img.unsqueeze(0)
-    pred = self.model.inference(img)
+    pred = self.model.inference(img, batch=False)
     pred = self.tokenizer.decode(pred)
     return pred
   
 
 class Trainer:
-  def __init__(self, model, optimizer, loss_fn, train_loader, valid_loader, device, model_name='nmt_model'):
+  def __init__(self, model, optimizer, loss_fn, train_loader, valid_loader, tokenizer, device, wandb=None, model_name='nmt_model', model_save_path='model'):
+
     self.model = model
     self.optimizer = optimizer
     self.loss_fn = loss_fn
     self.train_loader = train_loader
     self.valid_loader = valid_loader
+    self.tokenizer = tokenizer
+    self.wandb = wandb
+
     
     self.model.to(device)
     
@@ -340,29 +387,50 @@ class Trainer:
     self.validation_loss = []
     self.validation_acc = []
     self.model_name = model_name
+    self.model_save_path = Path(model_save_path)
 
   def save_model(self, path):
-    torch.save({'model':self.model.state_dict(), 'optim':self.optimizer.state_dict()}, path)
+    torch.save({'model':self.model.state_dict(), 'optim':self.optimizer.state_dict()}, self.model_save_path / path)
+  
+  def save_loss_acc(self, loss_acc_dict, path):
+    torch.save(loss_acc_dict, self.model_save_path / path)
     
-  def train_by_num_epoch(self, num_epochs):
-    for epoch in tqdm(range(num_epochs)):
+  def train_and_validate(self):
+    for b_idx, batch in enumerate(tqdm(self.train_loader, leave=False)):
       self.model.train()
-      for batch in tqdm(self.train_loader, leave=False):
-        loss_value = self._train_by_single_batch(batch)
-        self.training_loss.append(loss_value)
-      self.model.eval()
-      validation_loss, validation_acc = self.validate()
-      self.validation_loss.append(validation_loss)
-      self.validation_acc.append(validation_acc)
+      loss_value = self._train_by_single_batch(batch)
+      self.training_loss.append(loss_value)
       
-      if validation_acc > self.best_valid_accuracy:
-        print(f"Saving the model with best validation accuracy: Epoch {epoch+1}, Acc: {validation_acc:.4f} ")
-        self.save_model(f'{self.model_name}_best.pt')
-      else:
-        self.save_model(f'{self.model_name}_last.pt')
-      self.best_valid_accuracy = max(validation_acc, self.best_valid_accuracy)
-
+      if self.wandb:
+        self.wandb.log(
+          {
+            'loss_train': loss_value
+          },
+          step=b_idx
+        )
       
+      if (b_idx+1) % 100 == 0:  
+        self.model.eval()
+        validation_loss, validation_acc, metric_dict = self.validate()
+        #self.validation_loss.append(validation_loss)
+        self.validation_acc.append(validation_acc)
+    
+        if validation_acc > self.best_valid_accuracy:
+          print(f"Saving the model with best validation accuracy: valid #{(b_idx+1) // 100}, Acc: {validation_acc:.4f} ")
+          self.save_model(f'{self.model_name}_best.pt')
+        else:
+          self.save_model(f'{self.model_name}_last.pt')
+          
+        self.best_valid_accuracy = max(validation_acc, self.best_valid_accuracy)
+        
+        # metric_dict['valid_loss'] = validation_loss
+        metric_dict['valid_acc'] = validation_acc
+        
+        if self.wandb:
+          self.wandb.log(metric_dict, step=b_idx)
+  
+    self.save_loss_acc({ 'train_loss': self.training_loss, 'valid_loss': self.validation_loss, 'valid_acc': self.validation_acc}, f'{self.model_name}_loss_acc.pt')
+  
   def _train_by_single_batch(self, batch):
     '''
     This method updates self.model's parameter with a given batch
@@ -410,7 +478,7 @@ class Trainer:
       print('An arbitrary loader is used instead of Validation loader')
     else:
       loader = self.valid_loader
-      
+
     self.model.eval()
     
     '''
@@ -423,17 +491,102 @@ class Trainer:
       for batch in tqdm(loader, leave=False):
         
         src, tgt_i, tgt_o = batch
-        pred = self.model(src.to(self.device), tgt_i.to(self.device))
-        loss = self.loss_fn(pred, tgt_o)
+        pred = self.model.inference(src.to(self.device), max_len=tgt_o.shape[1])
+        
+        pred = self.process_validation_outs(pred)
+        
+        # loss = self.loss_fn(pred, tgt_o)
         num_tokens = (tgt_o != 0).sum().item()
-        validation_loss += loss.item() * num_tokens
+        # validation_loss += loss.item() * num_tokens
+        
         num_total_tokens += num_tokens
+        acc_exact = pred.to(self.device) == tgt_o.to(self.device)
+        acc_exact = acc_exact[tgt_o != 0].sum()
+        validation_acc += acc_exact.item()
         
-        acc = torch.argmax(pred, dim=-1) == tgt_o.to(self.device)
-        acc = acc[tgt_o != 0].sum()
-        validation_acc += acc.item()
+        metric_dict = self.calc_validation_acc(pred, tgt_o)
         
-    return validation_loss / num_total_tokens, validation_acc / num_total_tokens
+    return validation_loss / num_total_tokens, validation_acc / num_total_tokens, metric_dict
+
+  def process_validation_outs(self, pred):
+    new_pred = []
+    
+    for prd in pred.clone().detach().cpu().numpy():
+      end_indices, *_ = np.where(prd == 2)
+      
+      if end_indices.shape[0] > 1:
+        end_index = end_indices[1]
+        prd[end_index:] = 0
+      
+      new_pred.append(prd[1:])
+    
+    new_pred = np.stack(new_pred, axis=0)
+    new_pred = torch.tensor(new_pred, dtype=torch.float64)
+    
+    return new_pred
+  
+  def calc_validation_acc(self, pred, tgt_o):
+    num_total = pred.shape[0]
+    cnts = [0, 0, 0, 0] # [exact, position, notes, length]
+
+    length_match_token_cnt = 0
+    add_cnts = [0, 0] # [exact, pclass]
+    
+    split_octave_and_pclass = lambda string: re.findall(r'(배|하배|하하배|청|중청)?(.+)', string)[0]
+    
+    pred = pred.clone().detach().cpu().tolist()
+    tgt_o = tgt_o.clone().detach().cpu().tolist()
+    
+    for prd, tar in zip(pred, tgt_o):
+      prd_filtered = self.tokenizer.decode( list(map(int, filter(lambda x: x not in (0, 1, 2), prd))) )
+      tar_filtered = self.tokenizer.decode( list(map(int, filter(lambda x: x not in (0, 1, 2), tar))) )
+      
+      if tar_filtered == prd_filtered:
+        cnts[0] += 1
+      
+      tar_notes, tar_positions = self.get_notes_and_positions(prd_filtered)
+      prd_notes, prd_positions = self.get_notes_and_positions(tar_filtered)
+      
+      if len(tar_notes) == len(prd_notes):
+        cnts[3] += 1
+        length_match_token_cnt += len(tar_notes)
+        
+        for note, hnote in zip(tar_notes, prd_notes):
+          note_oct, note_pc = split_octave_and_pclass(note)
+          hnote_oct, hnote_pc = split_octave_and_pclass(hnote)
+          
+          if note_oct == hnote_oct and note_pc == hnote_pc:
+            add_cnts[0] += 1
+            
+          if note_pc == hnote_pc:
+            add_cnts[1] += 1
+      
+      if tar_positions == prd_positions:
+        cnts[1] += 1
+      
+      if tar_notes == prd_notes:
+        cnts[2] += 1
+    
+    cnts = [ cnt / num_total for cnt in cnts ]
+    add_cnts = [ a_cnt / length_match_token_cnt if length_match_token_cnt > 0 else 0 for a_cnt in add_cnts ] 
+    
+    return { key: value for key, value in zip(['exact_all', 'exact_pos', 'exact_note', 'exact_length', 'note_pitch', 'note_pcalss'], cnts+add_cnts) }
+  
+  @staticmethod
+  def get_notes_and_positions(label):
+    pattern = r'([^_\s:]+|_+[^_\s:]+|[^:]\d+|[-])'
+    
+    token_groups = label.split()
+    
+    notes = []
+    positions = []
+    
+    for group in token_groups:
+      findings = re.findall(pattern, group)
+      notes.append(findings[0])
+      positions.append(findings[-1])
+    
+    return notes, positions
 
 def get_nll_loss(predicted_prob_distribution, indices_of_correct_token, eps=1e-10, ignore_index=0):
   '''
@@ -453,43 +606,111 @@ def get_nll_loss(predicted_prob_distribution, indices_of_correct_token, eps=1e-1
   loss = -filtered_prob
   return loss.mean()
 
+def get_img_paths(img_path_base, sub_dirs):
+  if isinstance(img_path_base, str):
+    img_path_base = Path(img_path_base)
+  
+  paths = [ (img_path_base/sd).glob('*.png') for sd in sub_dirs ]
+  paths = [ 
+    p 
+    for sd_p in paths 
+    for p in sd_p 
+  ]
+  
+  raw_dict = {
+    str(p).split('/')[-1].replace('.png', ''): str(p) \
+    for p in paths
+  }
 
+  res_dict = {}
 
-def main():
-  dataset = Dataset('labels_from_ls.csv', 'jeongganbo-png/splited-pngs/')
-  pre_dataset = Dataset('cv_label.csv', 'jeongganbo-png/splited-pngs/')
+  for name, path in sorted(raw_dict.items(), key=lambda x: x[0]):
+    name = re.sub(r'(_\d\d\d)|(_ot)', '', name)
+    
+    if res_dict.get(name, False):
+      res_dict[name].append(path)
+    else:
+      res_dict[name] = [path]
 
-  tokenizer = dataset.tokenizer + pre_dataset.tokenizer
-  pre_dataset.tokenizer = tokenizer
-  dataset.tokenizer = tokenizer
+  for name, paths in res_dict.items():
+    if len(paths) < 2:
+      res_dict[name] = paths[0]
 
-  with open('tokenizer.txt', 'w') as f:
+  return res_dict
+
+def getConfs(argv):
+  args = argv[1:]
+  
+  try:
+    opt_list, _ = getopt.getopt(args, 'f:n:p:e:')
+    
+  except getopt.GetoptError:
+    print('somethings gone wrong')
+    return None
+
+  opt_dict = {}
+  
+  for opt in opt_list:
+    name, value = opt 
+    name = name.replace('-', '')
+    
+    if value:
+      opt_dict[name] = value
+    else:
+      opt_dict[name] = name
+    
+  conf = OmegaConf.load(opt_dict['f'])
+  
+  if opt_dict.get('e'):
+    num_epoch_arg = int(opt_dict['e'])
+    conf.num_epoch = num_epoch_arg
+    
+  if opt_dict.get('n'):
+    name_arg = opt_dict['n']
+    conf.run_name = name_arg
+    
+  if opt_dict.get('p'):
+    project_arg = opt_dict['p']
+    conf.project_name = project_arg
+  
+  return conf
+
+def main(argv):
+  conf = getConfs(argv)
+  
+  wandb_run = wandb.init(
+    project=conf.project_name,
+    name=conf.model_name,
+    notes=conf.wandb_notes
+  )
+  
+  print('\nSTART: data_set loading\n')
+  
+  note_img_path_dict = get_img_paths('test/synth/src', ['notes', 'symbols'])
+  
+  train_set = Dataset(conf.train_set_path, note_img_path_dict)
+  valid_set = Dataset(conf.valid_set_path, note_img_path_dict, is_valid=True)
+  
+  train_loader = DataLoader(train_set, batch_size=conf.train_batch_size, shuffle=True, collate_fn=pad_collate)
+  valid_loader = DataLoader(valid_set, batch_size=1000, shuffle=False, collate_fn=pad_collate)
+  
+  print('\nCOMPLETE: data_set loading\n')
+
+  tokenizer = train_set.tokenizer + valid_set.tokenizer
+  train_set.tokenizer = tokenizer
+  valid_set.tokenizer = tokenizer
+  
+  with open(f'model/{conf.model_name}_tokenizer.txt', 'w') as f:
     f.write('\n'.join(tokenizer.vocab))
 
-  model = OMRModel(80, vocab_size=len(dataset.tokenizer.vocab), num_gru_layers=2)
+  model = OMRModel(80, vocab_size=len(tokenizer.vocab), num_gru_layers=2)
   optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
-  # train_set, valid_set, test_set = torch.utils.data.random_split(dataset, 
-  #                                                               [int(len(dataset)*0.8), 
-  #                                                                 int(len(dataset)*0.1), 
-  #                                                                 len(dataset) - int(len(dataset)*0.8)  - int(len(dataset)*0.1)] )
-  # train_set, valid_set= torch.utils.data.random_split(dataset, [int(len(dataset)*0.99), 
-  #                                                                 len(dataset) - int(len(dataset)*0.99)] )
-  train_set = dataset
-  valid_set = dataset
-
-  pre_train_loader = DataLoader(pre_dataset, batch_size=256, shuffle=True, collate_fn=pad_collate)
-  train_loader = DataLoader(train_set, batch_size=64, shuffle=True, collate_fn=pad_collate)
-  valid_loader = DataLoader(valid_set, batch_size=512, shuffle=False, collate_fn=pad_collate)
-  # test_loader = DataLoader(test_set, batch_size=32, shuffle=False, collate_fn=pad_collate)
-
-  trainer = Trainer(model, optimizer, get_nll_loss, pre_train_loader, valid_loader, 'cuda')
-  trainer.train_by_num_epoch(1)
-
-  trainer = Trainer(model, optimizer, get_nll_loss, train_loader, valid_loader, 'cuda')
-  trainer.train_by_num_epoch(80)
-
+  trainer = Trainer(model, optimizer, get_nll_loss, train_loader, valid_loader, tokenizer, 'cuda', wandb=wandb_run, model_name=conf.model_name, model_save_path='model')
+  
+  print('\nStart: Training\n')
+  
+  trainer.train_and_validate()
 
 if __name__ == "__main__":
-
-  main()
+  main(sys.argv)

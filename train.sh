@@ -1,0 +1,1 @@
+python3 omr_cnn.py -f configs/synth_only_240302_001.yaml

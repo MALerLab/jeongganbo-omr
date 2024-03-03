@@ -5,14 +5,15 @@ pngs/
 !test/
 test/*
 !test/daegeum/
+!test/synth/
 
 graphs/
 data/
+model/
 
 wandb/
 
 __pycache__/
-Pipfile.lock
 
 .DS_Store
 old_pngs/

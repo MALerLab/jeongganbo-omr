@@ -20,6 +20,7 @@ from torchvision import transforms
 
 from exp_utils import JeongganSynthesizer, PNAME_EN_LIST, SYMBOL_W_DUR_EN_LIST
 
+
 class RandomBoundaryDrop:
   def __init__(self, amount=3) -> None:
     self.amount = amount
@@ -129,6 +130,7 @@ class Dataset:
     img = self.transform(img)
     return img, self.tokenizer(annotations)
     
+
 def pad_collate(raw_batch):
   # raw batch is a list of tuples (img, annotation)
   # img is torch tensor with shape (1, H, W)
@@ -153,6 +155,7 @@ def pad_collate(raw_batch):
     label_batch[i, :len(label)] = torch.tensor(label)
   
   return img_batch, label_batch[:, :-1], label_batch[:, 1:]
+
 
 class ConvBlock(nn.Module):
   def __init__(self, in_channels, out_channels, kernel_size, stride, padding):
@@ -235,6 +238,7 @@ class QKVAttention(nn.Module):
     return attention
   
 
+
 class OMRModel(nn.Module):
   def __init__(self, hidden_size, vocab_size, num_gru_layers=2):
     super().__init__()
@@ -251,8 +255,7 @@ class OMRModel(nn.Module):
       ConvBlock(hidden_size//2, hidden_size, 3, 1, 1),
       nn.MaxPool2d(2, 2),
       ConvBlock(hidden_size, hidden_size, 3, 1, 1),
-    )
-    
+
     self.context_attention = ContextAttention(hidden_size, 4)
     self.cont2hidden = nn.Linear(hidden_size, hidden_size*num_gru_layers)
     self.cnn_gru = nn.GRU(hidden_size, hidden_size//2, 1, batch_first=True, dropout = 0.2, bidirectional=True)
@@ -266,6 +269,7 @@ class OMRModel(nn.Module):
     self.attn_layer2 = QKVAttention(hidden_size)
     self.final_gru2 = nn.GRU(hidden_size * 2, hidden_size*2, 1, batch_first=True)
     
+
     self.proj = nn.Linear(hidden_size*2, vocab_size)
 
   def run_img_cnn(self, x):
@@ -286,7 +290,6 @@ class OMRModel(nn.Module):
     x, context_vector = self.run_img_cnn(x)
     y = self.emb(y)
     gru_out, _ = self.gru(y, context_vector)
-
     attention = self.attn_layer1(gru_out, x)
     cat_out = torch.cat([gru_out, attention], dim=-1)
     cat_out, _ = self.final_gru1(cat_out)
@@ -294,7 +297,7 @@ class OMRModel(nn.Module):
     attention = self.attn_layer2(cat_out, x)
     cat_out = torch.cat([cat_out, attention], dim=-1)
     cat_out, _ = self.final_gru2(cat_out)
-    
+
     logit = self.proj(cat_out)
 
     return logit
@@ -338,6 +341,7 @@ class OMRModel(nn.Module):
     return outputs
 
 
+
 class Inferencer:
   def __init__(self, vocab_txt_fn='tokenizer.txt', model_weights='omr_model_best.pt'):
     self.tokenizer = Tokenizer(vocab_txt_fn=vocab_txt_fn)
@@ -363,6 +367,7 @@ class Inferencer:
 
 class Trainer:
   def __init__(self, model, optimizer, loss_fn, train_loader, valid_loader, tokenizer, device, wandb=None, model_name='nmt_model', model_save_path='model'):
+
     self.model = model
     self.optimizer = optimizer
     self.loss_fn = loss_fn
@@ -370,6 +375,7 @@ class Trainer:
     self.valid_loader = valid_loader
     self.tokenizer = tokenizer
     self.wandb = wandb
+
     
     self.model.to(device)
     
@@ -472,7 +478,7 @@ class Trainer:
       print('An arbitrary loader is used instead of Validation loader')
     else:
       loader = self.valid_loader
-    
+
     self.model.eval()
     
     '''

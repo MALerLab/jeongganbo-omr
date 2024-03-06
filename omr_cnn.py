@@ -255,6 +255,7 @@ class OMRModel(nn.Module):
       ConvBlock(hidden_size//2, hidden_size, 3, 1, 1),
       nn.MaxPool2d(2, 2),
       ConvBlock(hidden_size, hidden_size, 3, 1, 1),
+    )
 
     self.context_attention = ContextAttention(hidden_size, 4)
     self.cont2hidden = nn.Linear(hidden_size, hidden_size*num_gru_layers)

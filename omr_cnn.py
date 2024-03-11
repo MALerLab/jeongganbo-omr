@@ -95,6 +95,7 @@ class Dataset:
     self.img_path_dict = img_path_dict
     self.jng_synth = JeongganSynthesizer(img_path_dict)
     self.is_valid = is_valid
+    self.need_random = not is_valid
 
     if self.is_valid:
       self.transform = transforms.Compose([
@@ -124,7 +125,7 @@ class Dataset:
     annotations, width, height = itemgetter('label', 'width', 'height')(row)
     img = None
     
-    img = self.jng_synth.generate_image_by_label(annotations, width, height)
+    img = self.jng_synth.generate_image_by_label(annotations, width, height, apply_noise=self.need_random, random_symbols=self.need_random, layout_elements=self.need_random)
     
     img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
     img = self.transform(img)

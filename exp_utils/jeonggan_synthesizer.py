@@ -52,22 +52,18 @@ class JeongganSynthesizer:
       self.img_dict[key] = cv2.imread(path, cv2.IMREAD_UNCHANGED)
   
   def __call__(self, range_limit=True, ornaments=True, apply_noise=True, random_symbols=True, layout_elements=True):
+    label, *_, jng_img = self.generate_single_data(range_limit=range_limit, ornaments=ornaments, apply_noise=apply_noise, random_symbols=random_symbols, layout_elements=layout_elements)
+    
+    return label, jng_img
+  
+  def generate_single_data(self, range_limit=True, ornaments=True, apply_noise=True, random_symbols=True, layout_elements=True):
     img_w, img_h = self.get_size()
+    
     _, label = self.get_label_dict(range_limit=range_limit, ornaments=ornaments)
     
     jng_img = self.generate_image_by_label(label, img_w, img_h, apply_noise=apply_noise, random_symbols=random_symbols, layout_elements=layout_elements)
     
-    return label, jng_img
-  
-  def generate_single_data(self, range_limit=True, apply_noise=True):
-    img_w, img_h = self.get_size()
-    img = self.get_blank(img_w, img_h)
-    
-    jng_dict, label = self.get_label_dict(range_limit=range_limit)
-    
-    jng_img = self.generate_image_by_dict(img, jng_dict, apply_noise)
-    
-    return label, img_w, img_h
+    return label, img_w, img_h, jng_img
   
   # label generator
   @classmethod

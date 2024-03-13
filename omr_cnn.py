@@ -125,7 +125,12 @@ class Dataset:
     annotations, width, height = itemgetter('label', 'width', 'height')(row)
     img = None
     
-    img = self.jng_synth.generate_image_by_label(annotations, width, height, apply_noise=self.need_random, random_symbols=self.need_random, layout_elements=self.need_random)
+    while True:
+      try:
+        img = self.jng_synth.generate_image_by_label(annotations, width, height, apply_noise=self.need_random, random_symbols=self.need_random, layout_elements=self.need_random)
+        break
+      except:
+        pass
     
     img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
     img = self.transform(img)
@@ -679,7 +684,7 @@ def getConfs(argv):
 
 def main(argv):
   conf = getConfs(argv)
-  
+
   wandb_run = wandb.init(
     project=conf.project_name,
     name=conf.model_name,

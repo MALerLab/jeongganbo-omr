@@ -432,8 +432,8 @@ class JeongganSynthesizer:
     img = cv2.cvtColor(img, cv2.COLOR_RGBA2GRAY)
     
     # add random borders
-    border = [ randint(1, 3) for _ in range(4) ]
-    img = np.pad(img[border[0]:-border[1], border[2]:-border[3]], ((border[0], border[1]), (border[2], border[3])), mode='constant', constant_values=0)
+    border = [ randint(0, 3) for _ in range(4) ]
+    img = np.pad(img[border[0]:img.shape[0]-border[1], border[2]:img.shape[1]-border[3]], ((border[0], border[1]), (border[2], border[3])), mode='constant', constant_values=0)
     
     # add random lines
     is_vert = bool(randint(0, 1)) # True: vertical line, False: horizontal line

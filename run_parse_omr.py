@@ -61,12 +61,20 @@ class SigimsaeConverter:
   
   def up(self, pitch):
     if type(pitch) == int:
-      return self.midi_scales[self.midi_scales.index(pitch)+1]
+      if pitch in self.midi_scales:
+        return self.midi_scales[self.midi_scales.index(pitch)+1]
+      else:
+        print(f'pitch {pitch} not in midi scales')
+        return pitch
     return self.pitch2up[pitch]
   
   def down(self, pitch):
     if type(pitch) == int:
-      return self.midi_scales[self.midi_scales.index(pitch)-1]
+      if pitch in self.midi_scales:
+        return self.midi_scales[self.midi_scales.index(pitch)-1]
+      else:
+        print(f'pitch {pitch} not in midi scales')
+        return pitch
     return self.pitch2down[pitch]
   
   def up2(self, pitch, n=2):
@@ -116,7 +124,8 @@ def get_position_tuple(omr_text:str):
 
 
 def parse_omr_results(jeonggan: Jeonggan):
-  text = jeonggan.omr_text.replace(':5:5', ':5') # Hard-coded fix for a specific error
+  # text = jeonggan.omr_text.replace(':5:5', ':5').replace(':1:1', ':1') # Hard-coded fix for a specific error
+  text = jeonggan.omr_text
   notes = text.split(' ')
   notes = [x for x in notes if len(x)>2]
   text = ' '.join(notes)
@@ -159,14 +168,16 @@ def piece_to_score(piece):
         continue
       if symbol.note == '같은음표':
         symbol.midi = prev_pitch
-      if symbol.note == '노':
+      elif symbol.note == '노':
         symbol.midi = sigimsae_conv.down(prev_pitch)
-      if symbol.note == '니':
+      elif symbol.note == '니':
         symbol.midi = sigimsae_conv.up(prev_pitch)
-      if symbol.note =="로":
+      elif symbol.note =="로":
         symbol.midi = sigimsae_conv.down2(prev_pitch)
-      if symbol.note == "리":
+      elif symbol.note == "리":
         symbol.midi = sigimsae_conv.up2(prev_pitch)
+      elif symbol.note == '니나':
+        pass
         # if prev_offset != current_offset:
       if symbol.midi != 0:
         if prev_pitch != 0:
@@ -261,15 +272,15 @@ def main():
   entire_score = stream.Score()
   inst_names_in_order = ['daegeum', 'piri', 'haegeum', 'ajaeng', 'gayageum', 'geomungo']
   # inst_names_in_order = ['haegeum']
+  total_text = []
   for inst in inst_names_in_order:
     piece = piece_by_inst[inst]
     score = piece_to_score(piece)
     piece_in_text = piece_to_txt(piece)
-    with open(f'{inst}_omr.txt', 'w') as f:
-      f.write(piece_in_text)
-    # entire_score.append(score)
+    total_text.append(piece_in_text)
     entire_score.insert(0, score)
-
+  with open(f'yeominlak_omr_in_text.txt', 'w') as f:
+    f.write('\n\n'.join(total_text))
   entire_score.write('musicxml', fp='yeominlak_omr_test.musicxml')
 
 if __name__ == '__main__':

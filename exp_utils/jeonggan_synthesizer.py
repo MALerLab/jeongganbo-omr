@@ -1,6 +1,7 @@
 import re
 from random import randint, choice, uniform
 from operator import itemgetter
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -661,3 +662,35 @@ class JeongganSynthesizer:
         return (pos - 10)
       else:
         return (pos - 12) // row_div
+      
+def get_img_paths(img_path_base, sub_dirs):
+  if isinstance(img_path_base, str):
+    img_path_base = Path(img_path_base)
+  
+  paths = [ (img_path_base/sd).glob('*.png') for sd in sub_dirs ]
+  paths = [ 
+    p 
+    for sd_p in paths 
+    for p in sd_p 
+  ]
+  
+  raw_dict = {
+    str(p).split('/')[-1].replace('.png', ''): str(p) \
+    for p in paths
+  }
+
+  res_dict = {}
+
+  for name, path in sorted(raw_dict.items(), key=lambda x: x[0]):
+    name = re.sub(r'(_\d\d\d)|(_ot)', '', name)
+    
+    if res_dict.get(name, False):
+      res_dict[name].append(path)
+    else:
+      res_dict[name] = [path]
+
+  for name, paths in res_dict.items():
+    if len(paths) < 2:
+      res_dict[name] = paths[0]
+
+  return res_dict

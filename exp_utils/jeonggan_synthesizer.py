@@ -66,6 +66,24 @@ class JeongganSynthesizer:
     
     return label, img_w, img_h, jng_img
   
+  def generate_blank_data(self):
+    img_w, img_h = self.get_size()
+    jng_img = self.get_blank(img_w, img_h)
+    jng_dict, label = (
+      {
+        'row_div': 1,
+        'rows': [
+          { 
+            'col_div': 1,
+            'cols': [ '-' ]
+          }
+        ]
+      },
+      '-:5'
+    )
+    
+    return label, img_w, img_h, jng_img
+  
   # label generator
   @classmethod
   def get_label_dict(cls, div=None, range_limit=True, ornaments=True):

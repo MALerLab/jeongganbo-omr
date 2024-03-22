@@ -66,6 +66,7 @@ class JeongganSynthesizer:
     
     return label, img_w, img_h, jng_img
   
+  # totally empty jng
   def generate_blank_data(self):
     img_w, img_h = self.get_size()
     jng_img = self.get_blank(img_w, img_h)
@@ -75,11 +76,11 @@ class JeongganSynthesizer:
         'rows': [
           { 
             'col_div': 1,
-            'cols': [ '-' ]
+            'cols': [ '0' ]
           }
         ]
       },
-      '-:5'
+      '0:5'
     )
     
     return label, img_w, img_h, jng_img
@@ -129,8 +130,11 @@ class JeongganSynthesizer:
     }
     
     for _ in range(row_div):
-      col_div = randint(1, 2) if row_div > 1 else 1
+      col_div = randint(1, 3) if row_div > 1 else 1
       cols = []
+      
+      if col_div > 2:
+        ornaments = False
       
       for col_idx in range(col_div):
         group = choice(plist)
@@ -214,7 +218,7 @@ class JeongganSynthesizer:
           new_group.append( [ el_name, el_img_dim, el_img ])
           row_height.append(el_img_dim[0])
         
-        if random_symbols and randint(1, 10) > 7: # 30% chance
+        if len(row) < 3 and random_symbols and randint(1, 10) > 7: # 30% chance
           el_name = 'ignore'
           el_img = choice(self.img_dict[el_name]).copy() if bool(randint(0, 1)) else self.make_ignored_symbol()
           el_img_dim = list(el_img.shape[:2])
@@ -587,10 +591,14 @@ class JeongganSynthesizer:
     # group: str or list
     
     def cvt_name(g):
-      if isinstance(g, list):
-        return '_'.join([ NAME_EN_TO_KR[el] for el in g ])
+      result = ''
       
-      return NAME_EN_TO_KR[g]
+      if isinstance(g, list):
+        result = '_'.join([ NAME_EN_TO_KR[el] for el in g ])  
+      else:
+        result = NAME_EN_TO_KR[g]
+      
+      return result
     
     result_str = ''
     
@@ -611,10 +619,15 @@ class JeongganSynthesizer:
           group = cvt_name(group)
           result_str += group + ':' + str(2 + 3 * row_idx) + ' '
           
-        else:
+        elif col_div == 2:
           for col_idx, group in enumerate(cols):
             group = cvt_name(group)
             result_str += group + ':' + str( 1 + (3 * row_idx) + (2 * col_idx) ) + ' '
+            
+        elif col_div == 3:
+          for col_idx, group in enumerate(cols):
+            group = cvt_name(group)
+            result_str += group + ':' + str( (3 * row_idx) + (col_idx + 1) ) + ' '
     
     elif row_div == 2:
       for row_idx, row in enumerate(rows):
@@ -625,10 +638,15 @@ class JeongganSynthesizer:
           group = cvt_name(group)
           result_str += group + ':' + str(10 + row_idx) + ' '
           
-        else:
+        elif col_div == 2:
           for col_idx, group in enumerate(cols):
             group = cvt_name(group)
             result_str += group + ':' + str( 12 + (2*row_idx) + col_idx ) + ' '
+        
+        elif col_div == 3:
+          for col_idx, group in enumerate(cols):
+            group = cvt_name(group)
+            result_str += group + ':' + str( (1 - col_idx%2) * (12 + col_idx//2 + row_idx * 2) + col_idx%2 * (10 + row_idx) ) + ' '
     
     return result_str.strip()
   
@@ -641,10 +659,10 @@ class JeongganSynthesizer:
     token_groups = []
     
     for note in notes:
-      findings = re.findall(pattern, note)
-      token_groups.append( findings )
+      group = re.findall(pattern, note)
+      token_groups.append( group )
     
-    row_div = cls.get_row_div( list( map(lambda g: int(g[-1]), token_groups) ) )
+    row_div = cls.get_row_div( [ int(g[-1]) for g in token_groups ] )
     rows = [ { 'col_div': 0, 'cols': [] } for _ in range(row_div) ]
     
     for group in token_groups:

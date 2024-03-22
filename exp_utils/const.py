@@ -200,15 +200,15 @@ PNAME_KR_TO_EN = {
   '쉼표': 'pause'
 }
 
-SYMBOL_W_DUR_LIST = ['노', '니', '로', '리', '니나*', '느나', '노라', '느니', '노라느니', '니레나', '네로나', '니로나', '니느라니', '느나니나', '느나르나니', '같은음표']
-SYMBOL_W_DUR_EN_LIST = ['no', 'ni', 'ro', 'ri', 'nina-dur', 'neuna', 'nora', 'neuni', 'noraneuni', 'nirena', 'nerona', 'nirona', 'nineurani', 'neunanina', 'neunareunani', 'repeat']
+SYMBOL_W_DUR_LIST = ['노', '니', '로', '리', '니나*', '느나', '노라', '느니', '노라느니', '니레나', '네로나', '니로나', '니느라니', '느나니나', '느나르나니', '같은음표', '요성표', '겹요성표', '퇴성', '추성']
+SYMBOL_W_DUR_EN_LIST = ['no', 'ni', 'ro', 'ri', 'nina-dur', 'neuna', 'nora', 'neuni', 'noraneuni', 'nirena', 'nerona', 'nirona', 'nineurani', 'neunanina', 'neunareunani', 'repeat', 'shake', 'shake-rep', 'bend-down', 'bend-up']
 
-SYMBOL_WO_DUR_LIST = ['나니나', '나느나', '니레', '니나', '니로', '노네', '너녜', '노니로', '노리노', '네로네', '느네느', '나니로', '느로니르', '느니-르', '니루-니', '나니르노니르', '특강표', '늘임표', '흘림표', '겹흘림표', '반길이표', '덧길이표', '미는표', '떠이어표', '끊는표', '농음표', '풀어내림표']
+SYMBOL_WO_DUR_LIST = ['나니나', '나느나', '니레', '니나', '니로', '노네', '너녜', '노니로', '노리노', '네로네', '느네느', '나니로', '느로니르', '느니-르', '니루-니', '나니르노니르', '특강표', '늘임표', '흘림표', '겹흘림표', '반길이표', '덧길이표', '미는표', '떠이어표', '끊는표', '농음표', '풀어내림표', '싸랭', '슬기둥1', '슬기둥2', '슬기둥3', '전성', '자출']
 #'로니로', '격음표'
 
 SYMBOL_WO_DUR_ADD_EN_LIST = ['len-half/len-double', 'len-double/len-half']
 
-SYMBOL_WO_DUR_EN_LIST = ['nanina', 'naneuna', 'nire', 'nina', 'niro', 'none', 'neonye', 'noniro', 'norino', 'nerone', 'neuneneu', 'naniro', 'neuronireu', 'neuni-reu', 'niru-ni', 'nanireunonireu', 'accent', 'fermata', 'flow', 'flow-rep', 'len-half', 'len-double', 'push', 'roll', 'staccato', 'vib', 'vib-long'] + SYMBOL_WO_DUR_ADD_EN_LIST 
+SYMBOL_WO_DUR_EN_LIST = ['nanina', 'naneuna', 'nire', 'nina', 'niro', 'none', 'neonye', 'noniro', 'norino', 'nerone', 'neuneneu', 'naniro', 'neuronireu', 'neunireu', 'niruni', 'nanireunonireu', 'accent', 'fermata', 'flow', 'flow-rep', 'len-half', 'len-double', 'push', 'roll', 'staccato', 'vib', 'vib-long', 'diff-str-fast', 'diff-str-1', 'diff-str-2', 'diff-str-3', 'roll-str', 'pizzicato'] + SYMBOL_WO_DUR_ADD_EN_LIST 
 # 'roniro', 'strike'
 
 SYMBOL_LIST = SYMBOL_W_DUR_LIST + SYMBOL_WO_DUR_LIST
@@ -230,7 +230,11 @@ SYMBOL_W_DUR_EN_TO_KR = {
   'nineurani': '니느라니',
   'neunanina': '느나니나',
   'neunareunani': '느나르나니',
-  'repeat': '같은음표'
+  'repeat': '같은음표',
+  'shake': '요성표',
+  'shake-rep': '겹요성표',
+  'bend-down': '퇴성',
+  'bend-up': '추성',
 }
 
 SYMBOL_W_DUR_KR_TO_EN = {
@@ -249,7 +253,11 @@ SYMBOL_W_DUR_KR_TO_EN = {
   '니느라니': 'nineurani',
   '느나니나': 'neunanina',
   '느나르나니': 'neunareunani',
-  '같은음표': 'repeat'
+  '같은음표': 'repeat',
+  '요성표': 'shake',
+  '겹요성표': 'shake-rep',
+  '퇴성': 'bend-down',
+  '추성': 'bend-up',
 }
 
 SYMBOL_WO_DUR_EN_TO_KR = {
@@ -267,8 +275,8 @@ SYMBOL_WO_DUR_EN_TO_KR = {
   'naniro': '나니로',
   # 'roniro': '로니로',
   'neuronireu': '느로니르',
-  'neuni-reu': '느니-르',
-  'niru-ni': '니루-니',
+  'neunireu': '느니-르',
+  'niruni': '니루-니',
   'nanireunonireu': '나니르노니르',
   'accent': '특강표',
   'fermata': '늘임표',
@@ -282,7 +290,13 @@ SYMBOL_WO_DUR_EN_TO_KR = {
   'vib': '농음표',
   'vib-long': '풀어내림표',
   'len-half/len-double': '반길이표/덧길이표', 
-  'len-double/len-half': '덧길이표/반길이표'
+  'len-double/len-half': '덧길이표/반길이표',
+  'diff-str-fast': '싸랭',
+  'diff-str-1': '슬기둥1',
+  'diff-str-2': '슬기둥2',
+  'diff-str-3': '슬기둥3',
+  'roll-str': '전성',
+  'pizzicato': '자출',
 }
 
 SYMBOL_WO_DUR_KR_TO_EN = {
@@ -300,8 +314,8 @@ SYMBOL_WO_DUR_KR_TO_EN = {
   '나니로': 'naniro',
   # '로니로': 'roniro',
   '느로니르': 'neuronireu',
-  '느니-르': 'neuni-reu',
-  '니루-니': 'niru-ni',
+  '느니-르': 'neunireu',
+  '니루-니': 'niruni',
   '나니르노니르': 'nanireunonireu',
   '특강표': 'accent',
   '늘임표': 'fermata',
@@ -315,7 +329,13 @@ SYMBOL_WO_DUR_KR_TO_EN = {
   '농음표': 'vib',
   '풀어내림표': 'vib-long',
   '반길이표/덧길이표': 'len-half/len-double',
-  '덧길이표/반길이표': 'len-double/len-half'
+  '덧길이표/반길이표': 'len-double/len-half',
+  '싸랭': 'diff-str-fast',
+  '슬기둥1': 'diff-str-1',
+  '슬기둥2': 'diff-str-2',
+  '슬기둥3': 'diff-str-3',
+  '전성': 'roll-str',
+  '자출': 'pizzicato',
 }
 
 NAME_EN_TO_KR = dict(PNAME_EN_TO_KR, **SYMBOL_W_DUR_EN_TO_KR, **SYMBOL_WO_DUR_EN_TO_KR)

@@ -613,38 +613,6 @@ def get_nll_loss(predicted_prob_distribution, indices_of_correct_token, eps=1e-1
   loss = -filtered_prob
   return loss.mean()
 
-def get_img_paths(img_path_base, sub_dirs):
-  if isinstance(img_path_base, str):
-    img_path_base = Path(img_path_base)
-  
-  paths = [ (img_path_base/sd).glob('*.png') for sd in sub_dirs ]
-  paths = [ 
-    p 
-    for sd_p in paths 
-    for p in sd_p 
-  ]
-  
-  raw_dict = {
-    str(p).split('/')[-1].replace('.png', ''): str(p) \
-    for p in paths
-  }
-
-  res_dict = {}
-
-  for name, path in sorted(raw_dict.items(), key=lambda x: x[0]):
-    name = re.sub(r'(_\d\d\d)|(_ot)', '', name)
-    
-    if res_dict.get(name, False):
-      res_dict[name].append(path)
-    else:
-      res_dict[name] = [path]
-
-  for name, paths in res_dict.items():
-    if len(paths) < 2:
-      res_dict[name] = paths[0]
-
-  return res_dict
-
 def getConfs(argv):
   args = argv[1:]
   

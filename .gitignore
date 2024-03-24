@@ -1,7 +1,9 @@
 notebooks_local/
+outputs/
 
 pdfs/
 pngs/
+prev_results/
 !test/
 test/*
 !test/daegeum/

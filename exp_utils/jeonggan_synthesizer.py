@@ -119,10 +119,14 @@ class JeongganSynthesizer:
 
   @staticmethod
   def get_jng_dict(plist, div=None, ornaments=True):
+    if uniform(0, 1) > 0.98:
+      return {'row_div': 1, 'rows': [{'col_div': 1, 'cols': ['conti']}]} # 2% chance empty jng
+    p_prob = [1] * len(plist) + [5, 1] + [0.2] * len(SYMBOL_W_DUR_EN_LIST)
+    p_prob = np.asarray(p_prob) / sum(p_prob)
     plist = plist + ['conti', 'pause'] + SYMBOL_W_DUR_EN_LIST
     sym_set = set(SYMBOL_WO_DUR_EN_LIST)
     
-    row_div = div if div else randint(1, 3)
+    row_div = div if div else np.random.choice([1,2,3], 1, p=[0.45, 0.1, 0.45])[0]
     
     res = {
       'row_div': row_div,
@@ -130,14 +134,15 @@ class JeongganSynthesizer:
     }
     
     for _ in range(row_div):
-      col_div = randint(1, 3) if row_div > 1 else 1
+      col_div = np.random.choice([1,2,3], 1, p=[0.5, 0.49, 0.01])[0] if row_div > 1 else 1
       cols = []
       
       if col_div > 2:
         ornaments = False
       
       for col_idx in range(col_div):
-        group = choice(plist)
+        # group = choice(plist)
+        group = np.random.choice(plist, 1, p=p_prob)[0]
         
         if ornaments and group != 'pause' and randint(1, 10) > 6: # add symbol 40% chance
           sym_set_cp = sym_set.copy()
@@ -166,7 +171,8 @@ class JeongganSynthesizer:
     jng_dict = self.label2dict(label)
     
     img = self.get_blank(width, height)
-    
+    if label=='-:5':
+      return self.add_layout_elements(img)
     jng_img = self.generate_image_by_dict(img, jng_dict, apply_noise=apply_noise, random_symbols=random_symbols)
     
     if layout_elements:
@@ -712,7 +718,6 @@ class JeongganSynthesizer:
         return (pos - 10)
       else:
         return (pos - 12) // row_div
-
 def get_img_paths(img_path_base, sub_dirs):
   if isinstance(img_path_base, str):
     img_path_base = Path(img_path_base)

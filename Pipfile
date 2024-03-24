@@ -18,6 +18,8 @@ torchvision = "==0.15.2"
 wandb = "*"
 omegaconf = "*"
 x-transformers = "*"
+music21 = "*"
+hydra-core = "*"
 
 [dev-packages]
 ipykernel = "*"

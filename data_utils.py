@@ -3,7 +3,7 @@ import numpy as np
 from typing import List, Dict, Tuple
 from collections import Counter, defaultdict
 from pathlib import Path
-from omr_cnn import Inferencer
+from exp_utils.inferencer import Inferencer
 import torch
 
 
@@ -28,7 +28,7 @@ PAGE_HEIGHT = 3091
 
 
 class JeongganboReader:
-  def __init__(self, run_omr=False) -> None:
+  def __init__(self, run_omr=False, omr_model_path=None) -> None:
     
     self.line_min_length = 70
     self.line_min_thickness = 2
@@ -45,7 +45,9 @@ class JeongganboReader:
 
     self.run_omr = run_omr
     if self.run_omr:
-      self.omr = Inferencer()
+      self.omr = Inferencer(vocab_txt_fn='_'.join(omr_model_path.split('_')[:-1])+'_tokenizer.txt',
+                            model_weights=omr_model_path,
+                            device='cuda')
 
   def _repair_v_lines(self, img_bin_v: np.ndarray, img_bin_h:np.ndarray) -> np.ndarray:
     # img_bin_v = cv2.morphologyEx(img_bin, cv2.MORPH_OPEN, self.kernel_v)

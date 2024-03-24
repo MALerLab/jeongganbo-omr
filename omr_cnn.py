@@ -18,7 +18,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
-from exp_utils import JeongganSynthesizer, PNAME_EN_LIST, SYMBOL_W_DUR_EN_LIST
+from exp_utils import JeongganSynthesizer, PNAME_EN_LIST, SYMBOL_W_DUR_EN_LIST, JeongganProcessor
 
 
 class RandomBoundaryDrop:
@@ -344,7 +344,7 @@ class OMRModel(nn.Module):
 
 
 class Inferencer:
-  def __init__(self, vocab_txt_fn='tokenizer.txt', model_weights='omr_model_best.pt'):
+  def __init__(self, vocab_txt_fn='model/synth_only_240313_002_tokenizer.txt', model_weights='model/synth_only_240313_002_best.pt'):
     self.tokenizer = Tokenizer(vocab_txt_fn=vocab_txt_fn)
     self.model = OMRModel(80, vocab_size=len(self.tokenizer.vocab), num_gru_layers=2)
     self.model.load_state_dict(torch.load(model_weights, map_location='cpu')['model'])
@@ -355,10 +355,12 @@ class Inferencer:
       transforms.Lambda(lambda x: 1-x),
       transforms.Resize((160, 140)),
       ])
+    self.remove_border = JeongganProcessor.remove_borders
   
   def __call__(self, img):
     if isinstance(img, str) or isinstance(img, Path):
       img = cv2.imread(img)
+    img = self.remove_border(img)
     img = self.transform(img)
     img = img.unsqueeze(0)
     pred = self.model.inference(img, batch=False)

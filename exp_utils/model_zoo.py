@@ -242,7 +242,7 @@ class TransformerOMR(nn.Module):
     return logit
   
   @torch.inference_mode()  
-  def inference(self, x, max_len=None, batch=True):
+  def inference(self, x, max_len=None, batch=True, return_confidence=False):
     x = self.run_img_cnn(x)
     x += self.encoder_pos_enc(x)
     x = self.encoder(x)
@@ -250,18 +250,24 @@ class TransformerOMR(nn.Module):
     dec_tokens = torch.ones((x.shape[0], 1), dtype=torch.long).to(x.device)
     is_ended = torch.zeros((x.shape[0]), dtype=torch.bool).to(x.device)
     max_len = max_len if max_len else 50
+    if return_confidence: 
+      confidence = torch.ones((x.shape[0])).to(x.device)
     
-    for _ in range(max_len+1):
+    for _ in range(max_len):
       y = self.dec_embedder(dec_tokens) + self.decoder_pos_enc(dec_tokens)
       y = self.decoder(y, x)[:, -1:]
       logit = self.proj(y)
       new_token = torch.argmax(logit, dim=-1)
       is_ended += (new_token[:,0] == 2)
       dec_tokens = torch.cat([dec_tokens, new_token], dim=1)
+      if return_confidence:
+        prob = torch.max(torch.softmax(logit, dim=-1)[:, 0],dim=1)[0]
+        conf_clone = confidence.clone()
+        conf_clone[~is_ended] *= prob[~is_ended]
+        confidence = conf_clone
       if is_ended.all():
         break
     
-    if dec_tokens.shape[1] < max_len+1:
-      dec_tokens = torch.cat([dec_tokens, torch.zeros((dec_tokens.shape[0], max_len - dec_tokens.shape[1]+1), dtype=torch.long).to(x.device)], dim=1)
-
+    if return_confidence:
+      return dec_tokens, confidence
     return dec_tokens

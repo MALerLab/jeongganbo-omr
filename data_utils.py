@@ -254,9 +254,12 @@ class JeongganboReader:
 
   def run_omr_on_page(self, page):
     # page: Page object
-    for jeonggan in page.jeonggan_list:
-      jeonggan_img = jeonggan.img
-      jeonggan.omr_text = self.omr(jeonggan_img)
+    jeonggan_imgs = [jeonggan.img for jeonggan in page.jeonggan_list]
+    pred, confidence = self.omr(jeonggan_imgs)
+    for jeonggan, jg_pred, conf in zip(page.jeonggan_list, pred, confidence):
+      jeonggan.omr_text = jg_pred
+      jeonggan.omr_confidence = conf.item()
+
 
   def __call__(self, image, return_title_detected=False):
     if isinstance(image, str):

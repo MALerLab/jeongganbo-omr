@@ -52,24 +52,38 @@ class JeongganSynthesizer:
         
       self.img_dict[key] = cv2.imread(path, cv2.IMREAD_UNCHANGED)
   
-  def __call__(self):
-    img_w, img_h = self.get_size()
-    img = self.get_blank(img_w, img_h)
-    jng_dict, label = self.get_label_dict()
-    
-    jng_img = self.generate_image_by_dict(img, jng_dict)
+  def __call__(self, range_limit=True, ornaments=True, apply_noise=True, random_symbols=True, layout_elements=True):
+    label, *_, jng_img = self.generate_single_data(range_limit=range_limit, ornaments=ornaments, apply_noise=apply_noise, random_symbols=random_symbols, layout_elements=layout_elements)
     
     return label, jng_img
   
-  def generate_single_data(self, range_limit=True):
+  def generate_single_data(self, range_limit=True, ornaments=True, apply_noise=True, random_symbols=True, layout_elements=True):
     img_w, img_h = self.get_size()
-    img = self.get_blank(img_w, img_h)
     
-    jng_dict, label = self.get_label_dict(range_limit=range_limit)
+    _, label = self.get_label_dict(range_limit=range_limit, ornaments=ornaments)
     
-    jng_img = self.generate_image_by_dict(img, jng_dict)
+    jng_img = self.generate_image_by_label(label, img_w, img_h, apply_noise=apply_noise, random_symbols=random_symbols, layout_elements=layout_elements)
     
-    return label, img_w, img_h
+    return label, img_w, img_h, jng_img
+  
+  # totally empty jng
+  def generate_blank_data(self):
+    img_w, img_h = self.get_size()
+    jng_img = self.get_blank(img_w, img_h)
+    jng_dict, label = (
+      {
+        'row_div': 1,
+        'rows': [
+          { 
+            'col_div': 1,
+            'cols': [ '0' ]
+          }
+        ]
+      },
+      '0:5'
+    )
+    
+    return label, img_w, img_h, jng_img
   
   # label generator
   @classmethod
@@ -116,8 +130,11 @@ class JeongganSynthesizer:
     }
     
     for _ in range(row_div):
-      col_div = randint(1, 2) if row_div > 1 else 1
+      col_div = randint(1, 3) if row_div > 1 else 1
       cols = []
+      
+      if col_div > 2:
+        ornaments = False
       
       for col_idx in range(col_div):
         group = choice(plist)
@@ -145,16 +162,19 @@ class JeongganSynthesizer:
     return res
   
   # image generation
-  def generate_image_by_label(self, label, width, height):
+  def generate_image_by_label(self, label, width, height, apply_noise=True, random_symbols=True, layout_elements=True):
     jng_dict = self.label2dict(label)
     
     img = self.get_blank(width, height)
     
-    jng_img = self.generate_image_by_dict(img, jng_dict)
+    jng_img = self.generate_image_by_dict(img, jng_dict, apply_noise=apply_noise, random_symbols=random_symbols)
+    
+    if layout_elements:
+      jng_img = self.add_layout_elements(jng_img)
     
     return jng_img
     
-  def generate_image_by_dict(self, img, dict, apply_noise=True):
+  def generate_image_by_dict(self, img, dict, apply_noise=True, random_symbols=True):
     img_h, img_w = img.shape[:2]
     
     jng_arr = [ row['cols'] for row in dict['rows'] ]
@@ -198,12 +218,20 @@ class JeongganSynthesizer:
           new_group.append( [ el_name, el_img_dim, el_img ])
           row_height.append(el_img_dim[0])
         
+        if len(row) < 3 and random_symbols and randint(1, 10) > 7: # 30% chance
+          el_name = 'ignore'
+          el_img = choice(self.img_dict[el_name]).copy() if bool(randint(0, 1)) else self.make_ignored_symbol()
+          el_img_dim = list(el_img.shape[:2])
+          
+          new_group.append( [ el_name, el_img_dim, el_img ])
+          row_height.append(el_img_dim[0])
+        
         new_row.append( new_group )
       
       jng_infos.append(new_row)
       row_heights.append(max(row_height))
 
-    row_margin = randint(1, DEFAULT_MARGIN)
+    row_margin = randint(1, DEFAULT_MARGIN) if apply_noise else 3
     
     if sum(row_heights) > img_h - 2*row_margin:
       ignore = []
@@ -264,10 +292,10 @@ class JeongganSynthesizer:
         
         for group in row:
           for el_idx, (el_name, el_img_dim, el_img) in enumerate(group):
-            if el_idx > 0:
-              ignore.append(el_img_dim[1])
-            else:
-              valid.append(el_img_dim[1] * 1.1)
+            # if el_idx > 0:
+            #   ignore.append(el_img_dim[1])
+            # else:
+            valid.append(el_img_dim[1] * 1.1)
         
         w_size_ratio = (img_w - 2*col_margin - sum(ignore))/sum(valid)
         
@@ -308,11 +336,6 @@ class JeongganSynthesizer:
         
         notes.append(new_group)
       
-      # group_width_list = [ sum([ el[0].shape[1] for el in group ]) for group in notes ]
-      # row_width = sum( group_width_list )
-      # col_gap = (img_w - 2*col_margin - row_width) // (col_div + 1)
-      # col_template = [ col_margin + sum(group_width_list[:idx]) + (idx + 1) * col_gap for idx in range(col_div) ]
-      
       row_width = sum([ group[0][0].shape[1] for group in notes ])
       col_gap = (img_w - 2*col_margin - row_width) // (col_div + 1)
       col_template = [ col_margin + sum([ group[0][0].shape[1] for group in notes[:idx] ]) + (idx + 1) * col_gap for idx in range(col_div) ]
@@ -324,33 +347,34 @@ class JeongganSynthesizer:
         
         group_width = note_width + sym_width
         
+        # left positions
         if len(notes) > 1 and col_idx < 1 and pos_x - sym_width < 0:
-          if len(notes[col_idx + 1]) < 2 and group_width < col_template[col_idx + 1] + 2:
-            col_template[col_idx] = sym_width 
+          if len(notes[col_idx + 1]) < 2 and group_width < col_template[col_idx + 1]:
+            col_template[col_idx] = sym_width
           
           else:
             rs_width = int ( (col_template[col_idx + 1] - sym_width) * 0.9 )
             rs_ratio = rs_width / note_width
-            if rs_ratio < 1:
-              rs_height = group[0][0].shape[0] # int( group[0][0].shape[0] * rs_ratio )
-              new_note_img = cv2.resize(group[0][0], dsize=(rs_width, rs_height))
+            
+            if 0 < rs_ratio and rs_ratio < 1:
+              new_note_img = cv2.resize(group[0][0], dsize=None, fx=rs_ratio, fy=rs_ratio)
               
               new_group = [[new_note_img, group[0][1]], *group[1:]]
               notes[col_idx] = new_group
               
               col_template[col_idx] = sym_width
-          
+        
+        # right positions
         elif col_idx > 0 and pos_x + group_width > img_w:
           if len(notes[col_idx - 1]) < 2 and col_template[col_idx - 1] + notes[col_idx - 1][0][0].shape[1] + group_width < img_w:
             col_template[col_idx] = col_template[col_idx - 1] + notes[col_idx - 1][0][0].shape[1]
           else:
             rs_width = int((img_w - col_template[col_idx - 1] - sym_width) * 0.8)
-            # rs_width = int( (img_w - pos_x - group_width) * 0.9 )
             rs_ratio = rs_width / note_width
-            if rs_ratio < 1:
-              rs_height = int( group[0][0].shape[0] * rs_ratio )
-              new_note_img = cv2.resize(group[0][0], dsize=(rs_width, rs_height))
             
+            if 0 < rs_ratio and rs_ratio < 1:
+              new_note_img = cv2.resize(group[0][0], dsize=None, fx=rs_ratio, fy=rs_ratio)
+              
               new_group = [[new_note_img, group[0][1]], *group[1:]]
               notes[col_idx] = new_group
               col_template[col_idx] = col_template[col_idx - 1] + 1
@@ -363,7 +387,12 @@ class JeongganSynthesizer:
             min_margin = 4
             
             for split_idx, split_name in enumerate(el_name.split('/')):
-              el_img = self.img_dict[split_name].copy()
+              el_img = self.img_dict[split_name]
+              
+              if isinstance(el_img, list):
+                el_img = choice(el_img)
+              
+              el_img = el_img.copy()
               
               pos_x = col_template[col_idx]
               pos_y = row_template[row_idx] + row_heights[row_idx]//2 - el_img.shape[0]//2  
@@ -390,47 +419,19 @@ class JeongganSynthesizer:
           
           if el_idx > 0:
             min_margin = 0
-            # pos_y += int(group[0][0].shape[0] * 0.3)
             
             if col_div > 1 and col_idx < 1:
               pos_x -= el_img.shape[1] + min_margin
               
-              # if pos_x < 0:
-              #   resize_width = int((el_img.shape[1] + pos_x) * 0.8)
-              #   # resize_ratio = resize_width / el_img.shape[1]
-              #   el_img = cv2.resize(el_img, dsize=(resize_width, el_img.shape[0]), interpolation=None)
-              #   pos_x = 0
+            elif col_div < 2 and el_idx > 1 and pos_x + el_img.shape[1] > img_w:
+              rs_width = img_w - pos_x
+              rs_ratio = rs_width / el_img.shape[1]
               
-              # if len(group[1:]) < 2 and col_template[col_idx] > el_img.shape[1]:
-              #   pos_x = col_template[col_idx] // 2 - el_img.shape[1]//2
-              
-            # elif col_idx > 0:
-              # pos_x += group[0][0].shape[1] + min_margin
-              
-              # if pos_x + el_img.shape[1] > img_w:
-              #   resize_width = int((img_w - pos_x) * 0.8)
-              #   resize_ratio = resize_width / el_img.shape[1]
-              #   print(resize_width)
-              #   el_img = cv2.resize(el_img, dsize=(resize_width, el_img.shape[0]), interpolation=None)
-              
-              # if len(group[1:]) < 2 and pos_x + el_img.shape[1] < img_w:
-              #   pos_x += (img_w - pos_x)//2 - el_img.shape[1]//2
-            
-            elif len(notes) < 2 :
-              if el_idx > 1 and pos_x + el_img.shape[1] > img_w:
-                rs_width = img_w - pos_x
-                rs_ratio = rs_width / el_img.shape[1]
-                rs_height = int( rs_ratio * el_img.shape[0] )
-                el_img = cv2.resize(el_img, dsize=(rs_width, rs_height))
-              
-              # if len(group[1:]) < 1:
-              #   pos_x += (img_w - pos_x)//2 - el_img.shape[1]//2
+              if 0 < rs_ratio and rs_ratio < 1:
+                el_img = cv2.resize(el_img, dsize=None, fx=rs_ratio, fy=rs_ratio)
           
           if col_div > 1 and col_idx < 1:
-            if el_idx < 1:
-              cur_pos_x = pos_x
-            else:
-              cur_pos_x = pos_x - el_img.shape[1]
+            cur_pos_x = pos_x
           else:
             cur_pos_x = pos_x + el_img.shape[1]
           
@@ -449,9 +450,40 @@ class JeongganSynthesizer:
             el_img = self.resize_img_by_height(el_img, round(el_img.shape[0] * rand_ratio))
         
           el_img = self.remove_background(el_img)
-        
-          img = self.insert_img(img, el_img, pos_x, pos_y)
+          
+          if -1 * el_img.shape[1] < pos_x and pos_x < img_w and -1 * el_img.shape[0] < pos_y and pos_y < img_h:
+            img = self.insert_img(img, el_img, pos_x, pos_y)
     
+    return img
+  
+  def add_layout_elements(self, img):
+    img = cv2.cvtColor(img, cv2.COLOR_RGBA2GRAY)
+    
+    # add random borders
+    border = [ randint(0, 3) for _ in range(4) ]
+    img = np.pad(img[border[0]:img.shape[0]-border[1], border[2]:img.shape[1]-border[3]], ((border[0], border[1]), (border[2], border[3])), mode='constant', constant_values=0)
+    
+    # add random lines
+    is_vert = bool(randint(0, 1)) # True: vertical line, False: horizontal line
+    is_neg = bool(randint(0, 1))
+    line_len = randint(5, 20)
+    line_weight = randint(1, 5)
+    
+    if is_vert:
+      line_pos = randint(3, img.shape[1]-line_weight)
+      if is_neg:
+        img[img.shape[0]-line_len:img.shape[0], line_pos:line_pos+line_weight] = 0
+      else:
+        img[:line_len, line_pos:line_pos+line_weight] = 0
+      
+    else:
+      line_pos = randint(3, img.shape[0]-line_weight)
+      if is_neg:
+        img[line_pos:line_pos+line_weight, img.shape[1]-line_len:img.shape[1]] = 0
+      else:
+        img[line_pos:line_pos+line_weight, :line_len] = 0
+  
+    img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGBA)
     return img
   
   @staticmethod
@@ -545,9 +577,13 @@ class JeongganSynthesizer:
   @classmethod
   def make_mark(cls, img, height):
     bg = cls.get_blank(img.shape[1], height)
-    
     return cls.insert_img(bg, img, 0, MARK_HEIGHT//2 - img.shape[0]//2)
   
+  def make_ignored_symbol(self):
+    sym_h, sym_w = choice(self.img_dict['ignore']).shape[:2]
+    sym_img = np.random.randint(0, 255, (sym_h, sym_w, 1), dtype=np.uint8)
+    return cv2.cvtColor(sym_img, cv2.COLOR_GRAY2RGBA)
+    
   @staticmethod
   def dict2label(result_dict):
     # result_dict: { row_div: int, rows: list } 
@@ -555,10 +591,14 @@ class JeongganSynthesizer:
     # group: str or list
     
     def cvt_name(g):
-      if isinstance(g, list):
-        return '_'.join([ NAME_EN_TO_KR[el] for el in g ])
+      result = ''
       
-      return NAME_EN_TO_KR[g]
+      if isinstance(g, list):
+        result = '_'.join([ NAME_EN_TO_KR[el] for el in g ])  
+      else:
+        result = NAME_EN_TO_KR[g]
+      
+      return result
     
     result_str = ''
     
@@ -579,10 +619,15 @@ class JeongganSynthesizer:
           group = cvt_name(group)
           result_str += group + ':' + str(2 + 3 * row_idx) + ' '
           
-        else:
+        elif col_div == 2:
           for col_idx, group in enumerate(cols):
             group = cvt_name(group)
             result_str += group + ':' + str( 1 + (3 * row_idx) + (2 * col_idx) ) + ' '
+            
+        elif col_div == 3:
+          for col_idx, group in enumerate(cols):
+            group = cvt_name(group)
+            result_str += group + ':' + str( (3 * row_idx) + (col_idx + 1) ) + ' '
     
     elif row_div == 2:
       for row_idx, row in enumerate(rows):
@@ -593,10 +638,15 @@ class JeongganSynthesizer:
           group = cvt_name(group)
           result_str += group + ':' + str(10 + row_idx) + ' '
           
-        else:
+        elif col_div == 2:
           for col_idx, group in enumerate(cols):
             group = cvt_name(group)
             result_str += group + ':' + str( 12 + (2*row_idx) + col_idx ) + ' '
+        
+        elif col_div == 3:
+          for col_idx, group in enumerate(cols):
+            group = cvt_name(group)
+            result_str += group + ':' + str( (1 - col_idx%2) * (12 + col_idx//2 + row_idx * 2) + col_idx%2 * (10 + row_idx) ) + ' '
     
     return result_str.strip()
   
@@ -609,10 +659,10 @@ class JeongganSynthesizer:
     token_groups = []
     
     for note in notes:
-      findings = re.findall(pattern, note)
-      token_groups.append( findings )
+      group = re.findall(pattern, note)
+      token_groups.append( group )
     
-    row_div = cls.get_row_div( list( map(lambda g: int(g[-1]), token_groups) ) )
+    row_div = cls.get_row_div( [ int(g[-1]) for g in token_groups ] )
     rows = [ { 'col_div': 0, 'cols': [] } for _ in range(row_div) ]
     
     for group in token_groups:
@@ -662,17 +712,13 @@ class JeongganSynthesizer:
         return (pos - 10)
       else:
         return (pos - 12) // row_div
-      
 def get_img_paths(img_path_base, sub_dirs):
   if isinstance(img_path_base, str):
     img_path_base = Path(img_path_base)
   
-  paths = [ (img_path_base/sd).glob('*.png') for sd in sub_dirs ]
-  paths = [ 
-    p 
-    for sd_p in paths 
-    for p in sd_p 
-  ]
+  paths = []
+  for sd in sub_dirs:
+    paths += list( (img_path_base / sd).glob('*.png') )
   
   raw_dict = {
     str(p).split('/')[-1].replace('.png', ''): str(p) \

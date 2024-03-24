@@ -33,7 +33,7 @@ OCTAVE_RANGE = 6
 PITCH_ORDER = [
                                                                       'lim_ddd',  None,     None,       None,    None,
   'hwang_dd', None, 'tae_dd', 'hyeop_dd',  None,   'joong_dd', None,  'lim_dd',  'ee_dd',  'nam_dd',   'mu_dd',  None,
-  'hwang_d',  None, 'tae_d',  'hyeop_d',  'go_d',  'joong_d',  None,  'lim_d',   None,     'nam_d',    'mu_d',   'eung_d',
+  'hwang_d',  None, 'tae_d',  'hyeop_d',  'go_d',  'joong_d',  None,  'lim_d',   'ee_d',   'nam_d',    'mu_d',   'eung_d',
   'hwang',    None, 'tae',    'hyeop',    'go',    'joong',    None,  'lim',     'ee',     'nam',      'mu',     'eung',
   'hwang_u',  None, 'tae_u',  'hyeop_u',  'go_u',  'joong_u',  None,  'lim_u',   None,     'nam_u',    'mu_u',   None,
   'hwang_uu'
@@ -718,6 +718,8 @@ class JeongganSynthesizer:
         return (pos - 10)
       else:
         return (pos - 12) // row_div
+
+
 def get_img_paths(img_path_base, sub_dirs):
   if isinstance(img_path_base, str):
     img_path_base = Path(img_path_base)

@@ -19,6 +19,8 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 
 from exp_utils import JeongganSynthesizer, PNAME_EN_LIST, SYMBOL_W_DUR_EN_LIST, JeongganProcessor
+from exp_utils.jeonggan_synthesizer import get_img_paths
+from exp_utils.model_zoo import OMRModel, TransformerOMR
 
 
 class RandomBoundaryDrop:
@@ -102,7 +104,7 @@ class Dataset:
       transforms.ToTensor(),
       transforms.Grayscale(num_output_channels=1),
       transforms.Lambda(lambda x: 1-x),
-      transforms.Resize((160, 140)),
+      transforms.Resize((160, 140), antialias=True),
       ])
     else:
       self.transform = transforms.Compose([
@@ -110,7 +112,7 @@ class Dataset:
       transforms.ToTensor(),
       transforms.Grayscale(num_output_channels=1),
       transforms.Lambda(lambda x: 1-x),
-      transforms.RandomResizedCrop((160, 140), scale=(0.85, 1,0)),
+      transforms.RandomResizedCrop((160, 140), scale=(0.85, 1,0), antialias=True),
       ])
     self.tokenizer = self._make_tokenizer()
 
@@ -163,190 +165,6 @@ def pad_collate(raw_batch):
   return img_batch, label_batch[:, :-1], label_batch[:, 1:]
 
 
-class ConvBlock(nn.Module):
-  def __init__(self, in_channels, out_channels, kernel_size, stride, padding):
-    super().__init__()
-    self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)
-    # self.bn = nn.BatchNorm2d(out_channels)
-    self.relu = nn.GELU()
-
-  def forward(self, x):
-    x = self.conv(x)
-    # x = self.bn(x)
-    x = self.relu(x)
-    return x
-
-
-class ContextAttention(nn.Module):
-  def __init__(self, size, num_head):
-    super(ContextAttention, self).__init__()
-    self.attention_net = nn.Linear(size, size)
-    self.num_head = num_head
-
-    if size % num_head != 0:
-      raise ValueError("size must be dividable by num_head", size, num_head)
-    self.head_size = int(size/num_head)
-    self.context_vector = torch.nn.Parameter(torch.Tensor(num_head, self.head_size, 1))
-    nn.init.uniform_(self.context_vector, a=-1, b=1)
-
-  def get_attention(self, x):
-    attention = self.attention_net(x)
-    attention_tanh = torch.tanh(attention)
-    attention_split = torch.stack(attention_tanh.split(split_size=self.head_size, dim=2), dim=0)
-    similarity = torch.bmm(attention_split.view(self.num_head, -1, self.head_size), self.context_vector)
-    similarity = similarity.view(self.num_head, x.shape[0], -1).permute(1,2,0)
-    return similarity
-
-  def forward(self, x):
-    attention = self.attention_net(x)
-    attention_tanh = torch.tanh(attention)
-    if self.head_size != 1:
-      attention_split = torch.stack(attention_tanh.split(split_size=self.head_size, dim=2), dim=0)
-      similarity = torch.bmm(attention_split.view(self.num_head, -1, self.head_size), self.context_vector)
-      similarity = similarity.view(self.num_head, x.shape[0], -1).permute(1,2,0)
-      similarity[x.sum(-1)==0] = -1e10 # mask out zero padded_ones
-      softmax_weight = torch.softmax(similarity, dim=1)
-
-      x_split = torch.stack(x.split(split_size=self.head_size, dim=2), dim=2)
-      weighted_x = x_split * softmax_weight.unsqueeze(-1).repeat(1,1,1, x_split.shape[-1])
-      attention = weighted_x.view(x_split.shape[0], x_split.shape[1], x.shape[-1])
-    else:
-      softmax_weight = torch.softmax(attention, dim=1)
-      attention = softmax_weight * x
-
-    sum_attention = torch.sum(attention, dim=1)
-    return sum_attention
-
-
-class QKVAttention(nn.Module):
-  def __init__(self, hidden_size, num_head=4, dropout=0.1):
-    super().__init__()
-    
-    self.kv = nn.Linear(hidden_size, hidden_size*2)
-    self.q = nn.Linear(hidden_size, hidden_size)
-    self.num_head = num_head
-    self.mlp = nn.Sequential(
-      nn.Linear(hidden_size, hidden_size * 4),
-      nn.GELU(),
-      nn.Dropout(dropout),
-      nn.Linear(hidden_size * 4, hidden_size),
-    )    
-    
-  def forward(self, _q, _kv):
-    kv = self.kv(_kv)
-    k, v = torch.split(kv, kv.shape[-1]//2, dim=-1)
-    q = self.q(_q)
-    attention_score = torch.bmm(q, k.permute(0,2,1))
-    attention_score = torch.softmax(attention_score, dim=-1)
-    attention = torch.bmm(attention_score, v)
-    attention = self.mlp(attention)
-    
-    return attention
-  
-
-
-class OMRModel(nn.Module):
-  def __init__(self, hidden_size, vocab_size, num_gru_layers=2):
-    super().__init__()
-
-    self.layers = nn.Sequential(
-      ConvBlock(1, hidden_size//4, 3, 1, 1),
-      nn.MaxPool2d(2, 2),
-      ConvBlock(hidden_size//4, hidden_size//4, 3, 1, 1),
-      nn.MaxPool2d(2, 2),
-      ConvBlock(hidden_size//4, hidden_size//2, 3, 1, 1),
-      nn.MaxPool2d(2, 2),
-      ConvBlock(hidden_size//2, hidden_size//2, 3, 1, 1),
-      nn.MaxPool2d(2, 2),
-      ConvBlock(hidden_size//2, hidden_size, 3, 1, 1),
-      nn.MaxPool2d(2, 2),
-      ConvBlock(hidden_size, hidden_size, 3, 1, 1),
-    )
-
-    self.context_attention = ContextAttention(hidden_size, 4)
-    self.cont2hidden = nn.Linear(hidden_size, hidden_size*num_gru_layers)
-    self.cnn_gru = nn.GRU(hidden_size, hidden_size//2, 1, batch_first=True, dropout = 0.2, bidirectional=True)
-
-    self.emb = nn.Embedding(vocab_size, hidden_size)
-    self.gru = nn.GRU(hidden_size, hidden_size, num_gru_layers, batch_first=True, dropout = 0.2)
-
-    self.attn_layer1 = QKVAttention(hidden_size)
-    self.final_gru1 = nn.GRU(hidden_size * 2, hidden_size, 1, batch_first=True)
-
-    self.attn_layer2 = QKVAttention(hidden_size)
-    self.final_gru2 = nn.GRU(hidden_size * 2, hidden_size*2, 1, batch_first=True)
-    
-
-    self.proj = nn.Linear(hidden_size*2, vocab_size)
-
-  def run_img_cnn(self, x):
-    x = self.layers(x)
-    x = x.permute(0, 2, 3, 1)
-    x = x.reshape(x.shape[0], -1, x.shape[-1])
-    x = x.contiguous()
-    x, _ = self.cnn_gru(x)
-
-    context_vector = self.context_attention(x)
-    context_vector = self.cont2hidden(context_vector.relu())
-    context_vector = context_vector.reshape(x.shape[0], -1, context_vector.shape[-1]//2).permute(1,0,2)
-    context_vector = context_vector.contiguous()
-
-    return x, context_vector
-
-  def forward(self, x, y):
-    x, context_vector = self.run_img_cnn(x)
-    y = self.emb(y)
-    gru_out, _ = self.gru(y, context_vector)
-    attention = self.attn_layer1(gru_out, x)
-    cat_out = torch.cat([gru_out, attention], dim=-1)
-    cat_out, _ = self.final_gru1(cat_out)
-    
-    attention = self.attn_layer2(cat_out, x)
-    cat_out = torch.cat([cat_out, attention], dim=-1)
-    cat_out, _ = self.final_gru2(cat_out)
-
-    logit = self.proj(cat_out)
-
-    return logit
-
-  @torch.inference_mode()  
-  def inference(self, x, max_len=None, batch=True):
-    # assert x.shape[0] == 1 # batch size must be 1
-
-    x, last_hidden = self.run_img_cnn(x)
-    
-    y = torch.ones((x.shape[0], 1), dtype=torch.long).to(x.device)
-    outputs = torch.ones_like(y) if batch else []
-    
-    final_gru_last_hidden1 = None
-    final_gru_last_hidden2 = None
-    
-    max_len = max_len if max_len else 100
-    
-    for _ in range(max_len):
-      y = self.emb(y)
-      gru_out, last_hidden = self.gru(y, last_hidden)
-      
-      attention = self.attn_layer1(gru_out, x)
-      cat_out = torch.cat([gru_out, attention], dim=-1)
-      cat_out, final_gru_last_hidden1 = self.final_gru1(cat_out, final_gru_last_hidden1)        
-      
-      attention = self.attn_layer2(cat_out, x)
-      cat_out = torch.cat([cat_out, attention], dim=-1)
-      cat_out, final_gru_last_hidden2 = self.final_gru2(cat_out, final_gru_last_hidden2)
-
-      logit = self.proj(cat_out)
-      y = torch.argmax(logit, dim=-1)
-      
-      if batch:
-        outputs = torch.cat([outputs, y], dim=1) 
-      else:
-        if y.item() == 2:
-          break
-        outputs.append(y.item())
-    
-    return outputs
-
 
 
 class Inferencer:
@@ -359,7 +177,7 @@ class Inferencer:
       [transforms.ToTensor(),
       transforms.Grayscale(num_output_channels=1),
       transforms.Lambda(lambda x: 1-x),
-      transforms.Resize((160, 140)),
+      transforms.Resize((160, 140), antialias=True),
       ])
     self.remove_border = JeongganProcessor.remove_borders
   
@@ -405,7 +223,7 @@ class Trainer:
     torch.save(loss_acc_dict, self.model_save_path / path)
     
   def train_and_validate(self):
-    for b_idx, batch in enumerate(tqdm(self.train_loader, leave=False)):
+    for b_idx, batch in enumerate(tqdm(self.train_loader)):
       self.model.train()
       loss_value = self._train_by_single_batch(batch)
       self.training_loss.append(loss_value)
@@ -418,7 +236,7 @@ class Trainer:
           step=b_idx
         )
       
-      if (b_idx+1) % 100 == 0:  
+      if (b_idx+1) % 500 == 0:  
         self.model.eval()
         validation_loss, validation_acc, metric_dict = self.validate()
         #self.validation_loss.append(validation_loss)
@@ -524,7 +342,7 @@ class Trainer:
       end_indices, *_ = np.where(prd == 2)
       
       if end_indices.shape[0] > 1:
-        end_index = end_indices[1]
+        end_index = end_indices[0] + 1 # Doesn't it have to be end_indices[0] + 1 instead of end_indices[1]?
         prd[end_index:] = 0
       
       new_pred.append(prd[1:])
@@ -668,8 +486,8 @@ def main(argv):
   train_set = Dataset(conf.train_set_path, note_img_path_dict)
   valid_set = Dataset(conf.valid_set_path, note_img_path_dict, is_valid=True)
   
-  train_loader = DataLoader(train_set, batch_size=conf.train_batch_size, shuffle=True, collate_fn=pad_collate)
-  valid_loader = DataLoader(valid_set, batch_size=1000, shuffle=False, collate_fn=pad_collate)
+  train_loader = DataLoader(train_set, batch_size=conf.train_batch_size, shuffle=True, collate_fn=pad_collate, num_workers=8)
+  valid_loader = DataLoader(valid_set, batch_size=1000, shuffle=False, collate_fn=pad_collate, num_workers=4)
   
   print('\nCOMPLETE: data_set loading\n')
 
@@ -680,7 +498,8 @@ def main(argv):
   with open(f'model/{conf.model_name}_tokenizer.txt', 'w') as f:
     f.write('\n'.join(tokenizer.vocab))
 
-  model = OMRModel(80, vocab_size=len(tokenizer.vocab), num_gru_layers=2)
+  # model = OMRModel(80, vocab_size=len(tokenizer.vocab), num_gru_layers=2)
+  model = TransformerOMR(128, len(tokenizer.vocab))
   optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
   trainer = Trainer(model, optimizer, get_nll_loss, train_loader, valid_loader, tokenizer, 'cuda', wandb=wandb_run, model_name=conf.model_name, model_save_path='model')

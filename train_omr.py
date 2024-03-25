@@ -11,8 +11,7 @@ from torch.utils.data import DataLoader
 
 from exp_utils.jeonggan_synthesizer import get_img_paths
 from exp_utils.model_zoo import OMRModel, TransformerOMR
-from exp_utils.train_utils import CosineLRScheduler, Dataset, pad_collate, Trainer, get_nll_loss
-
+from exp_utils.train_utils import CosineLRScheduler, Dataset, pad_collate, Trainer, get_nll_loss, LabelStudioDataset
 
 
 def getConfs(argv):
@@ -68,15 +67,18 @@ def main(conf: DictConfig):
   
   train_set = Dataset(original_wd /conf.train_set_path, note_img_path_dict)
   valid_set = Dataset(original_wd /conf.valid_set_path, note_img_path_dict, is_valid=True)
+  aux_train_set = LabelStudioDataset(original_wd /conf.aux_train_set_path, original_wd / 'jeongganbo-png/splited-pngs')
   
   train_loader = DataLoader(train_set, batch_size=conf.train_batch_size, shuffle=True, collate_fn=pad_collate, num_workers=8)
   valid_loader = DataLoader(valid_set, batch_size=1000, shuffle=False, collate_fn=pad_collate, num_workers=4)
+  aux_loader = DataLoader(aux_train_set, batch_size=conf.train_batch_size, shuffle=True, collate_fn=pad_collate, num_workers=4, drop_last=True)
   
   print('\nCOMPLETE: data_set loading\n')
 
-  tokenizer = train_set.tokenizer + valid_set.tokenizer
+  tokenizer = train_set.tokenizer + valid_set.tokenizer + aux_train_set.tokenizer
   train_set.tokenizer = tokenizer
   valid_set.tokenizer = tokenizer
+  aux_train_set.tokenizer = tokenizer
   
   with open(original_wd / f'model/{conf.model_name}_tokenizer.txt', 'w') as f:
     f.write('\n'.join(tokenizer.vocab))
@@ -92,7 +94,8 @@ def main(conf: DictConfig):
                     train_loader, 
                     valid_loader, 
                     tokenizer,
-                    scheduler=scheduler, 
+                    scheduler=scheduler,
+                    aux_loader=aux_loader,
                     device='cuda', 
                     wandb=wandb_run, 
                     model_name=conf.model_name, 

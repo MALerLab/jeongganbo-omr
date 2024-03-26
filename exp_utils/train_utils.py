@@ -32,6 +32,7 @@ class Trainer:
                tokenizer, 
                device,
                scheduler=None, 
+               aux_loader=None,
                wandb=None, 
                model_name='nmt_model', 
                model_save_path='model'):
@@ -42,6 +43,7 @@ class Trainer:
     self.loss_fn = loss_fn
     self.train_loader = train_loader
     self.valid_loader = valid_loader
+    self.aux_loader = aux_loader
     self.tokenizer = tokenizer
     self.wandb = wandb
 
@@ -65,6 +67,8 @@ class Trainer:
     torch.save(loss_acc_dict, self.model_save_path / path)
     
   def train_and_validate(self):
+    if self.aux_loader:
+      aux_iterator = iter(self.aux_loader)
     for b_idx, batch in enumerate(tqdm(self.train_loader)):
       self.model.train()
       loss_value = self._train_by_single_batch(batch)
@@ -77,7 +81,21 @@ class Trainer:
           },
           step=b_idx
         )
-      
+        
+      if self.aux_loader and b_idx % 50 == 0:
+        try :
+          aux_batch = next(aux_iterator)
+        except StopIteration:
+          aux_iterator = iter(self.aux_loader)
+          aux_batch = next(aux_iterator)
+        aux_loss = self._train_by_single_batch(aux_batch)
+        if self.wandb:
+          self.wandb.log(
+            {
+              'loss_aux': aux_loss
+            },
+            step=b_idx
+          )
       if (b_idx+1) % 500 == 0:  
         self.model.eval()
         validation_loss, validation_acc, metric_dict = self.validate()
@@ -338,7 +356,7 @@ class Dataset:
   def __init__(self, csv_path, img_path_dict, is_valid=False) -> None:
     self.df = pd.read_csv(csv_path)
     self.img_path_dict = img_path_dict
-    self.jng_synth = JeongganSynthesizer(img_path_dict)
+    self.jng_synth = self._make_jng_synth(img_path_dict)
     self.is_valid = is_valid
     self.need_random = not is_valid
 
@@ -358,6 +376,10 @@ class Dataset:
       transforms.RandomResizedCrop((160, 140), scale=(0.85, 1,0), antialias=True),
       ])
     self.tokenizer = self._make_tokenizer()
+
+  @staticmethod
+  def _make_jng_synth(img_path_dict):
+    return JeongganSynthesizer(img_path_dict)
 
   def _make_tokenizer(self):
     return Tokenizer(self.df['label'].values.tolist())
@@ -380,7 +402,28 @@ class Dataset:
     img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
     img = self.transform(img)
     return img, self.tokenizer(annotations)
+
+class LabelStudioDataset(Dataset):
+  def __init__(self, csv_path, img_path_dir, is_valid=False) -> None:
+    super().__init__(csv_path, None, is_valid)
+    self.img_path_dir = Path(img_path_dir)
+    assert self.img_path_dir.exists()
     
+    
+  @staticmethod
+  def _make_jng_synth(img_path_dict):
+    return None
+
+  def __getitem__(self, idx):
+    row = self.df.iloc[idx]
+    path, annotation = itemgetter('Filename', 'Annotations')(row)
+    img = cv2.imread(str(self.img_path_dir / path))
+    img = self.transform(img)
+    return img, self.tokenizer(annotation)
+  
+  def _make_tokenizer(self):
+    return Tokenizer(self.df['Annotations'].values.tolist())
+
 
 def pad_collate(raw_batch):
   # raw batch is a list of tuples (img, annotation)

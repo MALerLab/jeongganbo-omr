@@ -1,0 +1,8 @@
+project_name: 'jeonggan-omr'
+model_name: 'transformer_240324'
+train_set_path: 'data/train/006_all_1711271837.csv'
+valid_set_path: 'data/valid/006_all_1710296405.csv'
+aux_train_set_path: 'data/low_confident_pairs.csv'
+train_batch_size: 100
+
+wandb_notes: "change prob of jeonggan synth + add blank image"

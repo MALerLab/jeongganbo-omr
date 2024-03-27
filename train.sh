@@ -1,1 +1,1 @@
-python3 omr_cnn.py -f configs/synth_only_240313_002.yaml
+python3 train_omr.py +wandb_log=true

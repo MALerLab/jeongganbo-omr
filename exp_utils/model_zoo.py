@@ -1,6 +1,3 @@
-
-
-
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -194,7 +191,6 @@ class QKVAttention(nn.Module):
     attention = self.mlp(attention)
     
     return attention
-  
 
 
 class TransformerOMR(nn.Module):

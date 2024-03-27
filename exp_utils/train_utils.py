@@ -5,10 +5,10 @@ from operator import itemgetter
 import math
 
 from tqdm.auto import tqdm
+from matplotlib import pyplot as plt
 import pandas as pd
 import cv2
 import numpy as np
-
 
 import torch
 import torch.nn as nn
@@ -22,6 +22,8 @@ from exp_utils.model_zoo import OMRModel, TransformerOMR
 import torch
 from torch.optim.lr_scheduler import _LRScheduler
 from torch.optim import Optimizer
+
+import pdb
 
 class Trainer:
   def __init__(self, model, 
@@ -69,6 +71,7 @@ class Trainer:
   def train_and_validate(self):
     if self.aux_loader:
       aux_iterator = iter(self.aux_loader)
+    
     for b_idx, batch in enumerate(tqdm(self.train_loader)):
       self.model.train()
       loss_value = self._train_by_single_batch(batch)
@@ -81,14 +84,17 @@ class Trainer:
           },
           step=b_idx
         )
-        
+      
       if self.aux_loader and b_idx % 50 == 0:
+        
         try :
           aux_batch = next(aux_iterator)
         except StopIteration:
           aux_iterator = iter(self.aux_loader)
           aux_batch = next(aux_iterator)
+          
         aux_loss = self._train_by_single_batch(aux_batch)
+        
         if self.wandb:
           self.wandb.log(
             {
@@ -96,12 +102,12 @@ class Trainer:
             },
             step=b_idx
           )
+      
       if (b_idx+1) % 500 == 0:  
         self.model.eval()
-        validation_loss, validation_acc, metric_dict = self.validate()
-        #self.validation_loss.append(validation_loss)
+        validation_acc, metric_dict = self.validate()
         self.validation_acc.append(validation_acc)
-    
+
         if validation_acc > self.best_valid_accuracy:
           print(f"Saving the model with best validation accuracy: valid #{(b_idx+1) // 100}, Acc: {validation_acc:.4f} ")
           self.save_model(f'{self.model_name}_best.pt')
@@ -115,8 +121,8 @@ class Trainer:
         
         if self.wandb:
           self.wandb.log(metric_dict, step=b_idx)
-  
-    self.save_loss_acc({ 'train_loss': self.training_loss, 'valid_loss': self.validation_loss, 'valid_acc': self.validation_acc}, f'{self.model_name}_loss_acc.pt')
+    
+    # self.save_loss_acc({ 'train_loss': self.training_loss, 'valid_acc': self.validation_acc}, f'{self.model_name}_loss_acc.pt')
   
   def _train_by_single_batch(self, batch):
     '''
@@ -146,8 +152,8 @@ class Trainer:
     
     return loss.item()
 
-    
-  def validate(self, external_loader=None):
+  # ONLY WORKS WITH NON-SHUFFLED SITUATION
+  def validate(self, external_loader=None, with_confidence=False):
     '''
     This method calculates accuracy and loss for given data loader.
     It can be used for validation step, or to get test set result
@@ -172,33 +178,55 @@ class Trainer:
     '''
     Write your code from here, using loader, self.model, self.loss_fn.
     '''
-    validation_loss = 0
-    validation_acc = 0
+    num_total_match_token = 0
     num_total_tokens = 0
+    metric_dict_list = []
+    
+    if with_confidence:
+      confidence_list = []
+      pred_list = []
+    
+    
     with torch.no_grad():
       for batch in tqdm(loader, leave=False):
-        
         src, tgt_i, tgt_o = batch
-        pred = self.model.inference(src.to(self.device), max_len=tgt_o.shape[1])
+        
+        pred = self.model.inference(src.to(self.device), max_len=tgt_o.shape[1], return_confidence=with_confidence)
+        
+        confidence = None
+        
+        if with_confidence:
+          pred, confidence = pred
+          confidence_list.append(confidence)
+          pred_list.append(pred)
         
         pred = self.process_validation_outs(pred)
+        
+        # match pred length to tgt_0 length
         if pred.shape[1] > tgt_o.shape[1]:
           pred = pred[:, :tgt_o.shape[1]]
         elif pred.shape[1] < tgt_o.shape[1]:
           pred = torch.cat([pred, torch.zeros((pred.shape[0], tgt_o.shape[1] - pred.shape[1]))], dim=1)
         
-        # loss = self.loss_fn(pred, tgt_o)
         num_tokens = (tgt_o != 0).sum().item()
-        # validation_loss += loss.item() * num_tokens
         
         num_total_tokens += num_tokens
-        acc_exact = pred.to(self.device) == tgt_o.to(self.device)
-        acc_exact = acc_exact[tgt_o != 0].sum()
-        validation_acc += acc_exact.item()
+        num_match_token = pred.to(self.device) == tgt_o.to(self.device)
+        num_match_token = num_match_token[tgt_o != 0].sum()
+        num_total_match_token += num_match_token.item()
         
-        metric_dict = self.calc_validation_acc(pred, tgt_o)
-        
-    return validation_loss / num_total_tokens, validation_acc / num_total_tokens, metric_dict
+        metric_dict_list.append(self.calc_validation_acc(pred, tgt_o))
+    
+    validation_acc = num_total_match_token / num_total_tokens
+    metric_dict = { 
+      key: sum([ dct[key] for dct in metric_dict_list ]) / len(metric_dict_list)
+      for key in metric_dict_list[0].keys() 
+    }
+    
+    if with_confidence:
+      return validation_acc, metric_dict, pred_list, confidence_list
+    
+    return validation_acc, metric_dict
 
   def process_validation_outs(self, pred):
     new_pred = []
@@ -207,7 +235,7 @@ class Trainer:
       end_indices, *_ = np.where(prd == 2)
       
       if end_indices.shape[0] > 1:
-        end_index = end_indices[0] + 1 # Doesn't it have to be end_indices[0] + 1 instead of end_indices[1]?
+        end_index = end_indices[0] + 1
         prd[end_index:] = 0
       
       new_pred.append(prd[1:])
@@ -279,6 +307,40 @@ class Trainer:
       positions.append(findings[-1])
     
     return notes, positions
+  
+# draw bottom 30 jngs based on confidence
+def draw_low_confidence_plot(dataset, confidence_tensor_list, pred_tensor_list):
+  confidence_list = []
+  pred_list = []
+  
+  for b_idx in range(len(pred_tensor_list)):
+    confidence_list += confidence_tensor_list[b_idx].tolist()
+    pred_list += pred_tensor_list[b_idx].tolist()
+  
+  confidence_list = sorted(zip(confidence_list, [i for i in range(len(confidence_list))]), key=lambda x: x[0])
+  
+  plt.rcParams.update({'font.family': 'NanumGothic'})
+  fig = plt.figure(figsize=(30, 40), layout='tight', dpi=150.0)
+  
+  subplot_idx = 1
+  
+  for conf, data_idx in confidence_list[:30]:
+    img, annotation = dataset.get_item_by_idx(data_idx)
+    
+    prd = pred_list[data_idx]
+    prd_dec = dataset.tokenizer.decode( list(map(int, filter(lambda x: x not in (0, 1, 2), prd))) )
+    
+    plt.subplot(5, 6, subplot_idx)
+    plt.imshow(img)
+    plt.title(f'{round(conf, 3)}\n{annotation}\n{prd_dec}', loc='left', fontsize=10)
+    
+    subplot_idx += 1
+  
+  fig.canvas.draw()
+  
+  plt.close()
+  
+  return np.array(fig.canvas.renderer._renderer)
 
 class RandomBoundaryDrop:
   def __init__(self, amount=3) -> None:
@@ -384,24 +446,29 @@ class Dataset:
   def _make_tokenizer(self):
     return Tokenizer(self.df['label'].values.tolist())
   
-  def __len__(self):
-    return len(self.df)
-  
-  def __getitem__(self, idx):
+  def get_item_by_idx(self, idx):
     row = self.df.iloc[idx]
-    annotations, width, height = itemgetter('label', 'width', 'height')(row)
+    annotation, width, height = itemgetter('label', 'width', 'height')(row)
     img = None
     
     while True:
       try:
-        img = self.jng_synth.generate_image_by_label(annotations, width, height, apply_noise=self.need_random, random_symbols=self.need_random, layout_elements=self.need_random)
+        img = self.jng_synth.generate_image_by_label(annotation, width, height, apply_noise=self.need_random, random_symbols=self.need_random, layout_elements=self.need_random)
         break
       except:
         pass
     
     img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
+    
+    return img, annotation
+  
+  def __len__(self):
+    return len(self.df)
+  
+  def __getitem__(self, idx):
+    img, annotation = self.get_item_by_idx(idx)
     img = self.transform(img)
-    return img, self.tokenizer(annotations)
+    return img, self.tokenizer(annotation)
 
 class LabelStudioDataset(Dataset):
   def __init__(self, csv_path, img_path_dir, is_valid=False) -> None:
@@ -413,12 +480,18 @@ class LabelStudioDataset(Dataset):
   @staticmethod
   def _make_jng_synth(img_path_dict):
     return None
-
-  def __getitem__(self, idx):
+  
+  def get_item_by_idx(self, idx):
     row = self.df.iloc[idx]
     path, annotation = itemgetter('Filename', 'Annotations')(row)
     img = cv2.imread(str(self.img_path_dir / path))
+    
+    return img, annotation
+
+  def __getitem__(self, idx):
+    img, annotation = self.get_item_by_idx(idx)
     img = self.transform(img)
+    
     return img, self.tokenizer(annotation)
   
   def _make_tokenizer(self):

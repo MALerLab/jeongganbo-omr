@@ -201,6 +201,8 @@ class Trainer:
           pred_list.append(pred)
         
         pred = self.process_validation_outs(pred)
+        if with_confidence:
+          pred_list.append(pred)
         
         # match pred length to tgt_0 length
         if pred.shape[1] > tgt_o.shape[1]:

@@ -1,1 +1,1 @@
-python3 train_omr.py +wandb_log=true
+python3 train_omr.py

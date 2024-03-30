@@ -52,7 +52,7 @@ def getConfs(argv):
   return conf
 
 
-@hydra.main(config_path='configs/', config_name='synth_only_240327')
+@hydra.main(config_path='configs/', config_name='config')
 def main(conf: DictConfig):
   # conf = getConfs(argv)
   original_wd = Path(hydra.utils.get_original_cwd())
@@ -68,31 +68,53 @@ def main(conf: DictConfig):
   
   device = torch.device(conf.device)
   
-  print('\nSTART: data_set loading\n')
+  print('\ndata_set loading...')
   
   note_img_path_dict = get_img_paths(original_wd / 'test/synth/src', ['notes', 'symbols'])
   
   train_set = Dataset(original_wd /conf.train_set_path, note_img_path_dict)
+  
+  if conf.aux_train_set_path:
+    aux_train_set = LabelStudioDataset(original_wd /conf.aux_train_set_path, original_wd / 'jeongganbo-png/splited-pngs')
+  
   valid_set = Dataset(original_wd /conf.valid_set_path, note_img_path_dict, is_valid=True)
-  aux_train_set = LabelStudioDataset(original_wd /conf.aux_train_set_path, original_wd / 'jeongganbo-png/splited-pngs')
-  test_set = LabelStudioDataset(original_wd / conf.test_set_path, original_wd / 'jeongganbo-png/splited-pngs')
   
-  train_loader = DataLoader(train_set, batch_size=conf.train_batch_size, shuffle=True, collate_fn=pad_collate, num_workers=8)
+  if conf.test_set_path:
+    test_set = LabelStudioDataset(original_wd / conf.test_set_path, original_wd / 'jeongganbo-png/splited-pngs')
+  
+  train_batch_size = conf.train_batch_size
+  
+  if conf.aux_train_set_path:
+    aux_batch_size = int(conf.aux_train_batch_ratio * conf.train_batch_size)
+    train_batch_size = conf.train_batch_size - aux_batch_size
+    aux_loader = DataLoader(aux_train_set, batch_size=aux_batch_size, shuffle=True, collate_fn=pad_collate, num_workers=4, drop_last=True)
+  
+  train_loader = DataLoader(train_set, batch_size=train_batch_size, shuffle=True, collate_fn=pad_collate, num_workers=8)
+  
   valid_loader = DataLoader(valid_set, batch_size=1000, shuffle=False, collate_fn=pad_collate, num_workers=4)
-  aux_loader = DataLoader(aux_train_set, batch_size=conf.train_batch_size, shuffle=True, collate_fn=pad_collate, num_workers=4, drop_last=True)
-  test_loader = DataLoader(test_set, batch_size=1000, shuffle=False, collate_fn=pad_collate, num_workers=4)
   
-  print('\nCOMPLETE: data_set loading\n')
+  if conf.test_set_path:
+    test_loader = DataLoader(test_set, batch_size=1000, shuffle=False, collate_fn=pad_collate, num_workers=4)
+  
+  print('COMPLETE: data_set loading')
 
-  tokenizer = train_set.tokenizer + valid_set.tokenizer + aux_train_set.tokenizer + test_set.tokenizer
+  print('\nsaving tokenizer')
+  tokenizer = train_set.tokenizer + valid_set.tokenizer + test_set.tokenizer
+  
+  if conf.aux_train_set_path:
+    tokenzier += aux_train_set.tokenizer
+    aux_train_set.tokenizer = tokenizer
+  
   train_set.tokenizer = tokenizer
   valid_set.tokenizer = tokenizer
-  aux_train_set.tokenizer = tokenizer
   test_set.tokenizer = tokenizer
   
-  with open(original_wd / f'model/{conf.model_name}_tokenizer.txt', 'w') as f:
+  with open(f'model/{conf.model_name}_tokenizer.txt', 'w') as f:
     f.write('\n'.join(tokenizer.vocab))
+  
+  print('COMPLETE: saving tokenizer')
 
+  print('\nmodel initializing...')
   # model = OMRModel(80, vocab_size=len(tokenizer.vocab), num_gru_layers=2)
   model = TransformerOMR(128, len(tokenizer.vocab))
   optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
@@ -105,20 +127,22 @@ def main(conf: DictConfig):
                     valid_loader, 
                     tokenizer,
                     scheduler=scheduler,
-                    aux_loader=aux_loader,
+                    aux_loader=aux_loader if aux_loader else None,
                     device=device, 
                     wandb=wandb_run, 
                     model_name=conf.model_name, 
-                    model_save_path=original_wd / 'model')
+                    model_save_path='model')
   
-  print('\nStart: Training\n')
+  print('COMPLETE: model initializing')
+  
+  print('\nTraining...')
   
   trainer.train_and_validate()
   
-  print('\nCOMPELETE: Training')
+  print('COMPELETE: Training')
   
   # post train logging
-  print('\nStart: Post training logging - Validation\n')
+  print('\nStart: Post training logging - Last Validation')
   valid_acc, valid_metric_dict, valid_pred_list, valid_confi_list = trainer.validate(external_loader=valid_loader, with_confidence=True)
   valid_bottom_30 = draw_low_confidence_plot(valid_set, valid_confi_list, valid_pred_list)
   
@@ -127,20 +151,19 @@ def main(conf: DictConfig):
       'Last validation result': wandb.Table(columns=['valid_acc'] + list(valid_metric_dict.keys()), data=[[valid_acc] + list(valid_metric_dict.values())]),
       "Last validation confidence Bottom-30": wandb.Image(valid_bottom_30, caption="valid bottom-30")
     })
-  print('\nCOMPLETE: Post training logging - Validation\n')
+  print('COMPLETE: Post training logging - Last Validation')
   
-  print('\nStart: Post training logging - Test\n')  
-  test_acc, test_metric_dict, test_pred_list, test_confi_list = trainer.validate(external_loader=test_loader, with_confidence=True)
-  test_bot_30 = draw_low_confidence_plot(test_set, test_confi_list, test_pred_list)
-  
-  if conf.wandb_log:
-    wandb_run.log({
-      'Last test result': wandb.Table(columns=['test_acc'] + list(test_metric_dict.keys()), data=[[test_acc] + list(test_metric_dict.values())]),
-      "Last test confidence Bottom-30": wandb.Image(test_bot_30, caption="test bottom-30")
-    })
-  print('\nCOMPLETE: Post training logging - Test\n')
-  
-  print('\nCOMPLETE')
+  if conf.test_set_path:
+    print('\nStart: Post training logging - Test')  
+    test_acc, test_metric_dict, test_pred_list, test_confi_list = trainer.validate(external_loader=test_loader, with_confidence=True)
+    test_bot_30 = draw_low_confidence_plot(test_set, test_confi_list, test_pred_list)
+    
+    if conf.wandb_log:
+      wandb_run.log({
+        'Last test result': wandb.Table(columns=['test_acc'] + list(test_metric_dict.keys()), data=[[test_acc] + list(test_metric_dict.values())]),
+        "Last test confidence Bottom-30": wandb.Image(test_bot_30, caption="test bottom-30")
+      })
+    print('COMPLETE: Post training logging - Test')
 
 if __name__ == "__main__":
   main()

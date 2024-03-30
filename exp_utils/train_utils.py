@@ -73,6 +73,25 @@ class Trainer:
       aux_iterator = iter(self.aux_loader)
     
     for b_idx, batch in enumerate(tqdm(self.train_loader)):
+      # combining training sets
+      if self.aux_loader:
+        new_batch = []
+        
+        try :
+          aux_batch = next(aux_iterator)
+        except StopIteration:
+          aux_iterator = iter(self.aux_loader)
+          aux_batch = next(aux_iterator)
+        
+        for part_idx in range(len(batch)):
+          train_partial_batch = batch[part_idx]
+          aux_partial_batch= aux_batch[part_idx]
+          cat_partial_batch = torch.cat((train_partial_batch, aux_partial_batch), dim=0)
+          
+          new_batch.appned(cat_partial_batch)
+        
+        batch = tuple(new_batch)
+      
       self.model.train()
       loss_value = self._train_by_single_batch(batch)
       self.training_loss.append(loss_value)
@@ -84,24 +103,6 @@ class Trainer:
           },
           step=b_idx
         )
-      
-      if self.aux_loader and b_idx % 50 == 0:
-        
-        try :
-          aux_batch = next(aux_iterator)
-        except StopIteration:
-          aux_iterator = iter(self.aux_loader)
-          aux_batch = next(aux_iterator)
-          
-        aux_loss = self._train_by_single_batch(aux_batch)
-        
-        if self.wandb:
-          self.wandb.log(
-            {
-              'loss_aux': aux_loss
-            },
-            step=b_idx
-          )
       
       if (b_idx+1) % 500 == 0:  
         self.model.eval()
@@ -116,13 +117,10 @@ class Trainer:
           
         self.best_valid_accuracy = max(validation_acc, self.best_valid_accuracy)
         
-        # metric_dict['valid_loss'] = validation_loss
         metric_dict['valid_acc'] = validation_acc
         
         if self.wandb:
           self.wandb.log(metric_dict, step=b_idx)
-    
-    # self.save_loss_acc({ 'train_loss': self.training_loss, 'valid_acc': self.validation_acc}, f'{self.model_name}_loss_acc.pt')
   
   def _train_by_single_batch(self, batch):
     '''

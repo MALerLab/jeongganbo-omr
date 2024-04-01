@@ -35,6 +35,7 @@ class Trainer:
                device,
                scheduler=None, 
                aux_loader=None,
+               aux_valid_loader=None,
                wandb=None, 
                model_name='nmt_model', 
                model_save_path='model'):
@@ -46,19 +47,21 @@ class Trainer:
     self.train_loader = train_loader
     self.valid_loader = valid_loader
     self.aux_loader = aux_loader
+    self.aux_valid_loader = aux_valid_loader
     self.tokenizer = tokenizer
     self.wandb = wandb
-
     
+    self.device = device
     self.model.to(device)
     
-    self.grad_clip = 1.0
-    self.best_valid_accuracy = 0
-    self.device = device
-    
     self.training_loss = []
-    self.validation_loss = []
+    
+    self.grad_clip = 1.0
     self.validation_acc = []
+    self.HL_validation_acc = []
+    self.best_valid_accuracy = 0
+    self.best_HL_valid_accuracy = 0
+    
     self.model_name = model_name 
     self.model_save_path = Path(model_save_path)
 
@@ -104,13 +107,14 @@ class Trainer:
           step=b_idx
         )
       
-      if (b_idx+1) % 500 == 0:  
+      if (b_idx+1) % 500 == 0:
+        # synthed
         self.model.eval()
         validation_acc, metric_dict = self.validate()
         self.validation_acc.append(validation_acc)
 
         if validation_acc > self.best_valid_accuracy:
-          print(f"Saving the model with best validation accuracy: valid #{(b_idx+1) // 100}, Acc: {validation_acc:.4f} ")
+          print(f"Saving the model with best validation accuracy: valid #{(b_idx+1) // 500}, Acc: {validation_acc:.4f} ")
           self.save_model(f'{self.model_name}_best.pt')
         else:
           self.save_model(f'{self.model_name}_last.pt')
@@ -121,6 +125,26 @@ class Trainer:
         
         if self.wandb:
           self.wandb.log(metric_dict, step=b_idx)
+        
+        # HL
+        self.model.eval()
+        HL_validation_acc, HL_metric_dict = self.validate(external_loader=self.aux_valid_loader)
+        self.HL_validation_acc.append(HL_validation_acc)
+
+        if HL_validation_acc > self.best_HL_valid_accuracy:
+          print(f"Saving the model with best HL validation accuracy: valid #{(b_idx+1) // 500}, Acc: {HL_validation_acc:.4f} ")
+          self.save_model(f'{self.model_name}_HL_best.pt')
+        else:
+          self.save_model(f'{self.model_name}_HL_last.pt')
+          
+        self.best_HL_valid_accuracy = max(HL_validation_acc, self.best_HL_valid_accuracy)
+        
+        HL_metric_dict['valid_acc'] = HL_validation_acc
+        
+        HL_metric_dict = { f'HL_{key}': value for key, value in HL_metric_dict.items() }
+        
+        if self.wandb:
+          self.wandb.log(HL_metric_dict, step=b_idx)
   
   def _train_by_single_batch(self, batch):
     '''

@@ -1,17 +1,30 @@
-project_name: 'jeonggan-omr'
-model_name: 'transformer_with_aux_label_240327'
-wandb_entity: 'team-halsoo'
-wandb_log: true
+general:
+  device: cuda:0
+  model_name: transformer_with_aux_label
 
-device: 'cuda:1'
+wandb:
+  project: jeonggan-omr
+  entity: team-halsoo
+  do_log: true
+  is_sweep: false
 
-train_set_path: 'data/train/006_all_1711271837.csv'
-aux_train_set_path: 'data/low_confident_pairs.csv'
+data_path:
+  train: data/train/006_all_1711271837.csv
+  train_aux: data/low_confident_pairs.csv
+  valid_synthed: data/valid/006_all_1710296405.csv
+  valid_HL: data/valid/HL_valid_set.csv
+  test: data/HL_test_set.csv
 
-valid_set_path: 'data/valid/006_all_1710296405.csv'
-test_set_path: 'data/labels_from_ls_cleaned.csv'
+dataloader:
+  batch_size: 100
+  aux_ratio: 0.2
+  num_workers_synth: 8
+  num_workers_load: 4
 
-train_batch_size: 100
-aux_train_batch_ratio: 0.2
-
-wandb_notes: "log last validation and test result, bottom-30 jeonggan image plot"
+model:
+  lr: 1e-3
+  dim: 128
+  num_heads: 8
+  enc_depth: 2
+  dec_depth: 6
+  dropout: 0.1

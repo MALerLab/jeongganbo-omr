@@ -1,4 +1,4 @@
-import sys, getopt
+import os, sys, getopt
 from pathlib import Path
 import hydra
 
@@ -55,82 +55,91 @@ def getConfs(argv):
 @hydra.main(config_path='configs/', config_name='config')
 def main(conf: DictConfig):
   # conf = getConfs(argv)
+  
+  time_prefix = '-'.join('-'.join(os.getcwd().split('/')[-2:])[2:].split('-')[:-1]) # YY-MM-DD-HH-MM
+  os.mkdir(os.path.join(os.getcwd(), 'model'))
   original_wd = Path(hydra.utils.get_original_cwd())
+  
   wandb_run = None
   
-  if conf.wandb_log:
+  if conf.wandb.do_log:
     wandb_run = wandb.init(
-      project=conf.project_name,
-      name=conf.model_name,
-      entity=conf.wandb_entity,
-      notes=conf.wandb_notes
+      project=conf.wandb.project,
+      name=f'{time_prefix}_{conf.general.model_name}',
+      entity=conf.wandb.entity,
+      config=OmegaConf.to_container(conf, resolve=True, throw_on_missing=True),
+      notes=f'{os.getcwd()}'
     )
   
-  device = torch.device(conf.device)
+  device = torch.device(conf.general.device)
   
   print('\ndata_set loading...')
   
   note_img_path_dict = get_img_paths(original_wd / 'test/synth/src', ['notes', 'symbols'])
   
-  train_set = Dataset(original_wd /conf.train_set_path, note_img_path_dict)
+  train_set = Dataset(original_wd /conf.data_path.train, note_img_path_dict)
   
-  if conf.aux_train_set_path:
-    aux_train_set = LabelStudioDataset(original_wd /conf.aux_train_set_path, original_wd / 'jeongganbo-png/splited-pngs')
+  if conf.data_path.train_aux:
+    aux_train_set = LabelStudioDataset(original_wd /conf.data_path.train_aux, original_wd / 'jeongganbo-png/splited-pngs')
   
-  valid_set = Dataset(original_wd /conf.valid_set_path, note_img_path_dict, is_valid=True)
+  valid_set_synthed = Dataset(original_wd /conf.data_path.valid_synthed, note_img_path_dict, is_valid=True)
+  valid_set_HL = LabelStudioDataset(original_wd /conf.data_path.valid_HL, original_wd / 'jeongganbo-png/splited-pngs')
   
-  if conf.test_set_path:
-    test_set = LabelStudioDataset(original_wd / conf.test_set_path, original_wd / 'jeongganbo-png/splited-pngs')
+  if conf.data_path.test:
+    test_set = LabelStudioDataset(original_wd / conf.data_path.test, original_wd / 'jeongganbo-png/splited-pngs')
   
-  train_batch_size = conf.train_batch_size
+  train_batch_size = conf.dataloader.batch_size
   
-  if conf.aux_train_set_path:
-    aux_batch_size = int(conf.aux_train_batch_ratio * conf.train_batch_size)
-    train_batch_size = conf.train_batch_size - aux_batch_size
-    aux_loader = DataLoader(aux_train_set, batch_size=aux_batch_size, shuffle=True, collate_fn=pad_collate, num_workers=4, drop_last=True)
+  if conf.data_path.train_aux:
+    aux_batch_size = int(conf.dataloader.aux_ratio * conf.dataloader.batch_size)
+    train_batch_size = conf.dataloader.batch_size - aux_batch_size
+    aux_loader = DataLoader(aux_train_set, batch_size=aux_batch_size, shuffle=True, collate_fn=pad_collate, num_workers=conf.dataloader.num_workers_load, drop_last=True)
   
-  train_loader = DataLoader(train_set, batch_size=train_batch_size, shuffle=True, collate_fn=pad_collate, num_workers=8)
+  train_loader = DataLoader(train_set, batch_size=train_batch_size, shuffle=True, collate_fn=pad_collate, num_workers=conf.dataloader.num_workers_synth)
   
-  valid_loader = DataLoader(valid_set, batch_size=1000, shuffle=False, collate_fn=pad_collate, num_workers=4)
+  valid_synthed_loader = DataLoader(valid_set_synthed, batch_size=1000, shuffle=False, collate_fn=pad_collate, num_workers=conf.dataloader.num_workers_synth)
+  valid_HL_loader = DataLoader(valid_set_HL, batch_size=500, shuffle=False, collate_fn=pad_collate, num_workers=conf.dataloader.num_workers_load)
   
-  if conf.test_set_path:
-    test_loader = DataLoader(test_set, batch_size=1000, shuffle=False, collate_fn=pad_collate, num_workers=4)
+  if conf.data_path.test:
+    test_loader = DataLoader(test_set, batch_size=1000, shuffle=False, collate_fn=pad_collate, num_workers=conf.dataloader.num_workers_load)
   
   print('COMPLETE: data_set loading')
 
   print('\nsaving tokenizer')
-  tokenizer = train_set.tokenizer + valid_set.tokenizer + test_set.tokenizer
+  tokenizer = train_set.tokenizer + valid_set_synthed.tokenizer + valid_set_HL.tokenizer + test_set.tokenizer
   
-  if conf.aux_train_set_path:
-    tokenzier += aux_train_set.tokenizer
+  if conf.data_path.train_aux:
+    tokenizer += aux_train_set.tokenizer
     aux_train_set.tokenizer = tokenizer
   
   train_set.tokenizer = tokenizer
-  valid_set.tokenizer = tokenizer
+  valid_set_synthed.tokenizer = tokenizer
+  valid_set_HL.tokenizer = tokenizer
   test_set.tokenizer = tokenizer
   
-  with open(f'model/{conf.model_name}_tokenizer.txt', 'w') as f:
+  with open(f'model/{conf.general.model_name}_tokenizer.txt', 'w') as f:
     f.write('\n'.join(tokenizer.vocab))
   
   print('COMPLETE: saving tokenizer')
 
   print('\nmodel initializing...')
   # model = OMRModel(80, vocab_size=len(tokenizer.vocab), num_gru_layers=2)
-  model = TransformerOMR(128, len(tokenizer.vocab))
-  optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+  model = TransformerOMR(conf.model.dim, len(tokenizer.vocab), enc_depth=conf.model.enc_depth, dec_depth=conf.model.dec_depth, num_heads=8, dropout=conf.model.dropout)
+  optimizer = torch.optim.Adam(model.parameters(), lr=conf.model.lr)
   scheduler = CosineLRScheduler(optimizer, warmup_steps=1000, total_steps=len(train_loader), lr_min_ratio=0.0001, cycle_length=1.0)
 
   trainer = Trainer(model, 
                     optimizer, 
                     get_nll_loss, 
                     train_loader, 
-                    valid_loader, 
+                    valid_synthed_loader, 
                     tokenizer,
                     scheduler=scheduler,
                     aux_loader=aux_loader if aux_loader else None,
+                    aux_valid_loader=valid_HL_loader,
                     device=device, 
                     wandb=wandb_run, 
-                    model_name=conf.model_name, 
+                    model_name=conf.general.model_name,
                     model_save_path='model')
   
   print('COMPLETE: model initializing')
@@ -142,26 +151,44 @@ def main(conf: DictConfig):
   print('COMPELETE: Training')
   
   # post train logging
-  print('\nStart: Post training logging - Last Validation')
-  valid_acc, valid_metric_dict, valid_pred_list, valid_confi_list = trainer.validate(external_loader=valid_loader, with_confidence=True)
-  valid_bottom_30 = draw_low_confidence_plot(valid_set, valid_confi_list, valid_pred_list)
+  print('\nStart: Post training logging - Last Synthed Validation')
+  valid_acc, valid_metric_dict, valid_pred_list, valid_confi_list = trainer.validate(external_loader=valid_synthed_loader, with_confidence=True)
+  valid_bottom_30 = draw_low_confidence_plot(valid_set_synthed, valid_confi_list, valid_pred_list)
   
-  if conf.wandb_log:
+  if conf.wandb.do_log:
     wandb_run.log({
-      'Last validation result': wandb.Table(columns=['valid_acc'] + list(valid_metric_dict.keys()), data=[[valid_acc] + list(valid_metric_dict.values())]),
-      "Last validation confidence Bottom-30": wandb.Image(valid_bottom_30, caption="valid bottom-30")
+      'Last synthed validation result': wandb.Table(columns=['valid_acc'] + list(valid_metric_dict.keys()), data=[[valid_acc] + list(valid_metric_dict.values())]),
+      "Last synthed validation confidence Bottom-30": wandb.Image(valid_bottom_30, caption="valid synthed bottom-30")
     })
-  print('COMPLETE: Post training logging - Last Validation')
+  print('COMPLETE: Post training logging - Last Synthed Validation')
   
-  if conf.test_set_path:
+  print('\nStart: Post training logging - Last HL Validation')
+  valid_acc, valid_metric_dict, valid_pred_list, valid_confi_list = trainer.validate(external_loader=valid_HL_loader, with_confidence=True)
+  valid_bottom_30 = draw_low_confidence_plot(valid_set_HL, valid_confi_list, valid_pred_list)
+  
+  if conf.wandb.do_log:
+    wandb_run.log({
+      'Last HL validation result': wandb.Table(columns=['valid_acc'] + list(valid_metric_dict.keys()), data=[[valid_acc] + list(valid_metric_dict.values())]),
+      "Last HL validation confidence Bottom-30": wandb.Image(valid_bottom_30, caption="valid HL bottom-30")
+    })
+  print('COMPLETE: Post training logging - Last HL Validation')
+  
+  if conf.data_path.test:
     print('\nStart: Post training logging - Test')  
     test_acc, test_metric_dict, test_pred_list, test_confi_list = trainer.validate(external_loader=test_loader, with_confidence=True)
     test_bot_30 = draw_low_confidence_plot(test_set, test_confi_list, test_pred_list)
     
-    if conf.wandb_log:
+    if conf.wandb.do_log:
       wandb_run.log({
         'Last test result': wandb.Table(columns=['test_acc'] + list(test_metric_dict.keys()), data=[[test_acc] + list(test_metric_dict.values())]),
         "Last test confidence Bottom-30": wandb.Image(test_bot_30, caption="test bottom-30")
+      })
+    
+    if conf.wandb.is_sweep:
+      wandb_run.log({
+        {
+            'test_acc': test_acc
+        },
       })
     print('COMPLETE: Post training logging - Test')
 

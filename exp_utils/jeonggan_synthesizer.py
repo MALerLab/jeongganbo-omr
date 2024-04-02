@@ -122,13 +122,13 @@ class JeongganSynthesizer:
     if uniform(0, 1) > 0.98:
       return {'row_div': 1, 'rows': [{'col_div': 1, 'cols': ['conti']}]} # 2% chance empty jng
     
-    p_prob = [1] * len(plist) + [5, 1] + [0.2] * len(SYMBOL_W_DUR_EN_LIST)
+    p_prob = [1] * len(plist) + [5, 1] + [0.5] * len(SYMBOL_W_DUR_EN_LIST)
     p_prob = np.asarray(p_prob) / sum(p_prob)
     plist = plist + ['conti', 'pause'] + SYMBOL_W_DUR_EN_LIST
     
     sym_set = set(SYMBOL_WO_DUR_EN_LIST)
     
-    row_div = div if div else np.random.choice([1,2,3], 1, p=[0.45, 0.1, 0.45])[0]
+    row_div = div if div else np.random.choice([1,2,3], 1, p=[0.425, 0.15, 0.425])[0]
     
     res = {
       'row_div': row_div,
@@ -174,7 +174,7 @@ class JeongganSynthesizer:
     
     img = self.get_blank(width, height)
     
-    if label=='-:5':
+    if label=='-:5' or '':
       return self.add_layout_elements(img)
     
     jng_img = self.generate_image_by_dict(img, jng_dict, apply_noise=apply_noise, random_symbols=random_symbols)

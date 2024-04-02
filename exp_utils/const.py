@@ -205,12 +205,12 @@ PNAME_KR_TO_EN = {
 SYMBOL_W_DUR_LIST = ['노', '니', '로', '리', '니나*', '느나', '노라', '느니', '노라느니', '니레나', '네로나', '니로나', '니느라니', '느나니나', '느나르나니', '같은음표', '요성표', '겹요성표', '퇴성', '추성']
 SYMBOL_W_DUR_EN_LIST = ['no', 'ni', 'ro', 'ri', 'nina-dur', 'neuna', 'nora', 'neuni', 'noraneuni', 'nirena', 'nerona', 'nirona', 'nineurani', 'neunanina', 'neunareunani', 'repeat', 'shake', 'shake-rep', 'bend-down', 'bend-up']
 
-SYMBOL_WO_DUR_LIST = ['나니나', '나느나', '니레', '니나', '니로', '노네', '너녜', '노니로', '노리노', '네로네', '느네느', '나니로', '느로니르', '느니-르', '니루-니', '나니르노니르', '특강표', '늘임표', '흘림표', '겹흘림표', '반길이표', '덧길이표', '미는표', '떠이어표', '끊는표', '농음표', '풀어내림표', '싸랭', '슬기둥1', '슬기둥2', '슬기둥3', '전성', '자출', '반길이표/덧길이표', '덧길이표/반길이표']
+SYMBOL_WO_DUR_LIST = ['나니나', '나느나', '니레', '니나', '니로', '노네', '너녜', '노니로', '노리노', '네로네', '느네느', '나니로', '느로니르', '느니-르', '니루-니', '나니르노니르', '특강표', '늘임표', '흘림표', '겹흘림표', '반길이표', '덧길이표', '미는표', '떠이어표', '끊는표', '농음표', '풀어내림표', '싸랭', '슬기둥1', '슬기둥2', '슬기둥3', '전성', '자출', '잉어질표', '루러표', '시루표', '낮게', '서침표', '느니라', '반길이표/덧길이표', '덧길이표/반길이표']
 #'로니로', '격음표'
 
 SYMBOL_WO_DUR_ADD_EN_LIST = ['len-half/len-double', 'len-double/len-half']
 
-SYMBOL_WO_DUR_EN_LIST = ['nanina', 'naneuna', 'nire', 'nina', 'niro', 'none', 'neonye', 'noniro', 'norino', 'nerone', 'neuneneu', 'naniro', 'neuronireu', 'neunireu', 'niruni', 'nanireunonireu', 'accent', 'fermata', 'flow', 'flow-rep', 'len-half', 'len-double', 'push', 'roll', 'staccato', 'vib', 'vib-long', 'diff-str-fast', 'diff-str-1', 'diff-str-2', 'diff-str-3', 'roll-str', 'pizzicato'] + SYMBOL_WO_DUR_ADD_EN_LIST 
+SYMBOL_WO_DUR_EN_LIST = ['nanina', 'naneuna', 'nire', 'nina', 'niro', 'none', 'neonye', 'noniro', 'norino', 'nerone', 'neuneneu', 'naniro', 'neuronireu', 'neunireu', 'niruni', 'nanireunonireu', 'accent', 'fermata', 'flow', 'flow-rep', 'len-half', 'len-double', 'push', 'roll', 'staccato', 'vib', 'vib-long', 'diff-str-fast', 'diff-str-1', 'diff-str-2', 'diff-str-3', 'roll-str', 'pizzicato', 'splash', 'between-up', 'between-down', 'down-pitched', 'tongue', 'neunira'] + SYMBOL_WO_DUR_ADD_EN_LIST 
 # 'roniro', 'strike'
 
 SYMBOL_LIST = SYMBOL_W_DUR_LIST + SYMBOL_WO_DUR_LIST
@@ -299,6 +299,12 @@ SYMBOL_WO_DUR_EN_TO_KR = {
   'diff-str-3': '슬기둥3',
   'roll-str': '전성',
   'pizzicato': '자출',
+  'splash': '잉어질표',
+  'between-up': '루러표',
+  'between-down': '시루표',
+  'down-pitched': '낮게',
+  'tongue': '서침표',
+  'neunira': '느니라',
 }
 
 SYMBOL_WO_DUR_KR_TO_EN = {
@@ -338,6 +344,12 @@ SYMBOL_WO_DUR_KR_TO_EN = {
   '슬기둥3': 'diff-str-3',
   '전성': 'roll-str',
   '자출': 'pizzicato',
+  '잉어질표': 'splash',
+  '루러표': 'between-up',
+  '시루표': 'between-down',
+  '낮게': 'down-pitched',
+  '서침표': 'tongue',
+  '느니라': 'neunira',
 }
 
 NAME_EN_TO_KR = dict(PNAME_EN_TO_KR, **SYMBOL_W_DUR_EN_TO_KR, **SYMBOL_WO_DUR_EN_TO_KR)

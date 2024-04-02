@@ -1,6 +1,6 @@
 entity: team-halsoo
-project: my-first-sweep
-program: wandb_sweep.py
+project: jeonggan-omr
+program: train_omr.py
 method: grid
 metric:
   goal: maximize
@@ -20,4 +20,4 @@ command:
   - python
   - ${program}
   - ${args_no_hyphens}
-  - +wandb.is_sweep=true
+  - wandb.is_sweep=true

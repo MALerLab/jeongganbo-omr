@@ -51,6 +51,13 @@ def getConfs(argv):
   
   return conf
 
+def debug():
+  conf = OmegaConf.load('configs/debug.yaml')
+  
+  wandb_run = None
+  original_wd = Path('')
+  
+  device = torch.device(conf.general.device)
 
 @hydra.main(config_path='configs/', config_name='config')
 def main(conf: DictConfig):
@@ -137,6 +144,7 @@ def main(conf: DictConfig):
                     scheduler=scheduler,
                     aux_loader=aux_loader if aux_loader else None,
                     aux_valid_loader=valid_HL_loader,
+                    mix_aux=conf.dataloader.mix_aux,
                     device=device, 
                     wandb=wandb_run, 
                     model_name=conf.general.model_name,
@@ -186,9 +194,7 @@ def main(conf: DictConfig):
     
     if conf.wandb.is_sweep:
       wandb_run.log({
-        {
             'test_acc': test_acc
-        },
       })
     print('COMPLETE: Post training logging - Test')
 

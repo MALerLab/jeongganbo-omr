@@ -1,19 +1,19 @@
 general:
-  device: cuda:0
+  device: cuda:1
   model_name: transformer_with_aux_label
 
 wandb:
-  project: jeonggan-omr
+  project: my-first-sweep
   entity: team-halsoo
-  do_log: true
+  do_log: false
   is_sweep: false
 
 data_path:
-  train: data/train/006_all_1711271837.csv
-  train_aux: data/low_confident_pairs.csv
+  train: data/debug_train.csv
+  train_aux: data/debug_train_aux.csv
   valid_synthed: data/valid/006_all_1710296405.csv
   valid_HL: data/valid/HL_valid_set.csv
-  test: data/HL_test_set.csv
+  test: data/debug_test.csv
 
 dataloader:
   batch_size: 100

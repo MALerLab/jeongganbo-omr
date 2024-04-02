@@ -36,6 +36,7 @@ class Trainer:
                scheduler=None, 
                aux_loader=None,
                aux_valid_loader=None,
+               mix_aux=False,
                wandb=None, 
                model_name='nmt_model', 
                model_save_path='model'):
@@ -47,6 +48,7 @@ class Trainer:
     self.train_loader = train_loader
     self.valid_loader = valid_loader
     self.aux_loader = aux_loader
+    self.mix_aux = mix_aux
     self.aux_valid_loader = aux_valid_loader
     self.tokenizer = tokenizer
     self.wandb = wandb
@@ -77,7 +79,7 @@ class Trainer:
     
     for b_idx, batch in enumerate(tqdm(self.train_loader)):
       # combining training sets
-      if self.aux_loader:
+      if self.aux_loader and self.mix_aux:
         new_batch = []
         
         try :
@@ -88,10 +90,21 @@ class Trainer:
         
         for part_idx in range(len(batch)):
           train_partial_batch = batch[part_idx]
-          aux_partial_batch= aux_batch[part_idx]
+          aux_partial_batch = aux_batch[part_idx]
+          
+          if part_idx > 0:
+            max_token_len = max(train_partial_batch.shape[1], aux_partial_batch.shape[1])
+            train_padded = torch.zeros((train_partial_batch.shape[0], max_token_len), dtype=torch.long)
+            train_padded[:, :train_partial_batch.shape[1]] = train_partial_batch[:, :]
+            train_partial_batch = train_padded
+            
+            aux_padded = torch.zeros((aux_partial_batch.shape[0], max_token_len), dtype=torch.long)
+            aux_padded[:, :aux_partial_batch.shape[1]] = aux_partial_batch[:, :]
+            aux_partial_batch = aux_padded
+            
           cat_partial_batch = torch.cat((train_partial_batch, aux_partial_batch), dim=0)
           
-          new_batch.appned(cat_partial_batch)
+          new_batch.append(cat_partial_batch)
         
         batch = tuple(new_batch)
       
@@ -107,6 +120,25 @@ class Trainer:
           step=b_idx
         )
       
+      # aux train
+      if self.aux_loader and not self.mix_aux and b_idx % 50 == 0:
+        try :
+          aux_batch = next(aux_iterator)
+        except StopIteration:
+          aux_iterator = iter(self.aux_loader)
+          aux_batch = next(aux_iterator)
+
+        aux_loss = self._train_by_single_batch(aux_batch)
+
+        if self.wandb:
+          self.wandb.log(
+            {
+              'loss_aux': aux_loss
+            },
+            step=b_idx
+          )
+      
+      # validation
       if (b_idx+1) % 500 == 0:
         # synthed
         self.model.eval()
@@ -220,7 +252,6 @@ class Trainer:
         if with_confidence:
           pred, confidence = pred
           confidence_list.append(confidence)
-          pred_list.append(pred)
         
         pred = self.process_validation_outs(pred)
         if with_confidence:

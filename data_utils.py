@@ -223,7 +223,9 @@ class JeongganboReader:
 
     right_page = Page(right_page, right_jeonggan_boxes, right_thick_boxes, right_h_contours, None)
     left_page = Page(left_page, left_jeonggan_boxes, left_thick_boxes, left_h_contours, title_box)
-
+    if self.run_omr:
+      self.run_omr_on_page(right_page)
+      self.run_omr_on_page(left_page)
     # return right_page, left_page
     return left_page, right_page
 
@@ -261,7 +263,6 @@ class JeongganboReader:
     for jeonggan, jg_pred, conf in zip(page.jeonggan_list, pred, confidence):
       jeonggan.omr_text = jg_pred
       jeonggan.omr_confidence = conf.item()
-
 
   def __call__(self, image, return_title_detected=False):
     if isinstance(image, str):

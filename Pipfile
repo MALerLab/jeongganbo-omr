@@ -20,6 +20,7 @@ omegaconf = "*"
 x-transformers = "*"
 music21 = "*"
 hydra-core = "*"
+koreanize-matplotlib = "*"
 
 [dev-packages]
 ipykernel = "*"

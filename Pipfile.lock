@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "179f02467216305fa7961eeb29db8ebcec509ff30172263b53f4833d424a8b83"
+            "sha256": "8bdb33569f1fe8d75bc6cd1d52493180361716007ac78c62e1cb3e8a50f10d1d"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -366,11 +366,11 @@
         },
         "filelock": {
             "hashes": [
-                "sha256:521f5f56c50f8426f5e03ad3b281b490a87ef15bc6c526f168290f0c7148d44e",
-                "sha256:57dbda9b35157b05fb3e58ee91448612eb674172fab98ee235ccb0b5bee19a1c"
+                "sha256:5ffa845303983e7a0b7ae17636509bc97997d58afeafa72fb141a17b152284cb",
+                "sha256:a79895a25bbefdf55d1a2a0a80968f7dbb28edcd6d4234a0afb3f37ecde4b546"
             ],
             "markers": "python_version >= '3.8'",
-            "version": "==3.13.1"
+            "version": "==3.13.3"
         },
         "fonttools": {
             "hashes": [
@@ -601,6 +601,14 @@
             ],
             "markers": "python_version >= '3.7'",
             "version": "==1.4.5"
+        },
+        "koreanize-matplotlib": {
+            "hashes": [
+                "sha256:0930075aac18aab8bc871fc76134776b8bc240bd1cd2acfc00ebd3713323c444",
+                "sha256:4f563db1a75d9eb6bdb667a435adf8a5daf7e41504486f1b0fb1c20e4bfed4ca"
+            ],
+            "index": "pypi",
+            "version": "==0.1.1"
         },
         "label-studio-sdk": {
             "hashes": [
@@ -1882,12 +1890,12 @@
         },
         "wandb": {
             "hashes": [
-                "sha256:8752c67d1347a4c29777e64dc1e1a742a66c5ecde03aebadf2b0d62183fa307c",
-                "sha256:bb9eb5aa2c2c85e11c76040c4271366f54d4975167aa6320ba86c3f2d97fe5fa"
+                "sha256:023b6c72a6ef13085c9a970f6714548eca64f56d3d8698e42372764950dfd004",
+                "sha256:c317d55af93a688f3eafcdfec897f7b72da1fe1525140e076ecdaab8b09aa46e"
             ],
             "index": "pypi",
             "markers": "python_version >= '3.7'",
-            "version": "==0.16.4"
+            "version": "==0.16.5"
         },
         "webcolors": {
             "hashes": [

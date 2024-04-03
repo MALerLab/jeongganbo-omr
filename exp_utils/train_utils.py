@@ -348,7 +348,7 @@ class Tokenizer:
   def decode(self, labels):
     if isinstance(labels, torch.Tensor):
       labels = labels.tolist()
-    if 2 in labels:
+    if 2 in labels: # end token
       labels = labels[:labels.index(2)]
     return ''.join([self.vocab[idx] for idx in labels if idx not in (0, 1, 2)])
 

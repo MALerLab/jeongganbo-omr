@@ -9,6 +9,15 @@ from collections import OrderedDict
 from data_utils import JeongganboReader, Jeonggan, Piece
 from music21 import stream, note as mnote, meter as mmeter, key as mkey, pitch as mpitch
 
+def get_parser():
+  parser = argparse.ArgumentParser()
+  parser.add_argument('--jgb_dir', type=str, default='jeongganbo-png/pngs/')
+  parser.add_argument('--output_dir', type=str, default='omr_results/')
+  parser.add_argument('--model_path', type=str, default='model/transformer_240324_best.pt')
+  parser.add_argument('--error_dir', type=str, default='low_conf_jg_dir/')
+  return parser
+  
+  
 def define_pitch2midi():
   pitch2midi = {}
   pitch_name = ["황" ,'대' ,'태' ,'협' ,'고' ,'중' ,'유' ,'임' ,'이' ,'남' ,'무' ,'응']
@@ -204,6 +213,7 @@ class JeongganboParser:
     position_tuple = self.get_position_tuple(text)
     if position_tuple not in self.beat_template:
       print(f'position_tuple {position_tuple} not in template', text, jeonggan)
+      jeonggan.symbols = [Symbol('-:5', offset=0)]
       return
     by_note_position = self.beat_template[position_tuple]
     out = [Symbol(notes[i], offset=by_note_position[i]) for i in range(len(notes))]
@@ -268,13 +278,6 @@ def piece_to_txt(piece):
   symbols_in_gaks = '\n'.join(symbols_in_gaks)
   return symbols_in_gaks
 
-def get_parser():
-  parser = argparse.ArgumentParser()
-  parser.add_argument('--jgb_dir', type=str, default='jeongganbo-png/pngs/')
-  parser.add_argument('--output_dir', type=str, default='omr_results/')
-  parser.add_argument('--model_path', type=str, default='model/transformer_240324_best.pt')
-  return parser
-  
 
 def main():
   args = get_parser().parse_args()
@@ -284,14 +287,16 @@ def main():
 
   jgb_dir = Path(args.jgb_dir)
   out_dir = Path(args.output_dir)
+  low_conf_dir = Path(args.error_dir)
   out_dir.mkdir(exist_ok=True, parents=True)
+  low_conf_dir.mkdir(exist_ok=True, parents=True)
 
   page_by_inst = {'haegeum': (21, 38),
                   'ajaeng': (15,32),
-                  # 'daegeum': (19,36),
-                  # 'gayageum': (21,38),
-                  # 'geomungo': (17,34),
-                  # 'piri': (23,40)
+                  'daegeum': (19,36),
+                  'gayageum': (21,38),
+                  'geomungo': (17,34),
+                  'piri': (23,40)
                   }
 
   piece_by_inst = {}
@@ -304,12 +309,11 @@ def main():
   
   # Save the parsed results in label format
   for inst, piece in piece_by_inst.items():
-    omr_texts = '\n'.join(['|'.join([f'{jg.omr_text}/{jg.omr_confidence:4f}' for jg in gak.jeonggans]) for gak in piece.gaks if not gak.is_jangdan])
+    omr_texts = '\n'.join(['|'.join([jg.omr_text for jg in gak.jeonggans]) for gak in piece.gaks if not gak.is_jangdan])
     with open(out_dir/f'{inst}_omr.txt', 'w') as f:
       f.write(omr_texts)
-  
 
-  
+
   for inst, piece in piece_by_inst.items():
     print(inst)
     for jeonggan in piece.jeonggans:
@@ -317,10 +321,10 @@ def main():
     parser.parse_duration_and_offset(piece.jeonggans)
 
 
-  piece = piece_by_inst['haegeum']
+  # piece = piece_by_inst['haegeum']
   entire_score = stream.Score()
-  # inst_names_in_order = ['daegeum', 'piri', 'haegeum', 'ajaeng', 'gayageum', 'geomungo']
-  inst_names_in_order = ['haegeum', 'ajaeng']
+  inst_names_in_order = ['daegeum', 'piri', 'haegeum', 'ajaeng', 'gayageum', 'geomungo']
+  # inst_names_in_order = ['haegeum', 'ajaeng']
   # inst_names_in_order = ['haegeum']
   total_text = []
   for inst in inst_names_in_order:

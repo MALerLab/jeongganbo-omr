@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import koreanize_matplotlib
 from math import ceil
 from .jeonggan_synthesizer import JeongganSynthesizer, get_img_paths
 
@@ -25,12 +26,17 @@ class JeongganboPageDrawer:
   def draw_blank_page(self,
                       num_gaks = 10,
                       num_jeonggans_per_gak = 20,
-                      jg_width_ratio = 1.2):
+                      jg_width_ratio = 1.2,
+                      daegang_length = (6,4,4,6)):
 
     fig, ax = plt.subplots(figsize=(self.page_width, self.page_height), dpi=self.dpi)  # A4 paper size in inches
     # Set the limits of the plot
     ax.set_xlim(0, 8.27)
     ax.set_ylim(0, 11.69)
+    daegang_boundary = [-1]
+    for i, length in enumerate(daegang_length[:-1]):
+      daegang_boundary.append(daegang_boundary[-1] + length)
+    print(daegang_boundary)
 
     rectangle_x = self.page_left_margin  # X-coordinate of the top-left corner of the rectangle
     rectangle_y = self.page_bottom_margin  # Y-coordinate of the top-left corner of the rectangle
@@ -66,7 +72,7 @@ class JeongganboPageDrawer:
     for i, jeonggan_y in enumerate(reversed(jeonggan_positions)):
       for gak_x in gak_positions:
         ax.plot([gak_x, gak_x + gak_width*jg_width_ratio], [jeonggan_y, jeonggan_y], color='black', linewidth=0.5)
-      if i in (5, 9, 13): # TODO: make this more general
+      if i in daegang_boundary[1:]: # TODO: make this more general
         ax.plot([rectangle_x, rectangle_x + main_rect_width], [jeonggan_y, jeonggan_y], color='black', linewidth=1)
     
     jg_positions = [(gak_x, jeonggan_y) for gak_x in gak_positions for jeonggan_y in jeonggan_positions]
@@ -78,13 +84,14 @@ class JeongganboPageDrawer:
     return fig, ax, jg_positions, (jg_width, jg_height)
   
   def draw_jeonggan(self, jeonggan_labels, ax, jg_positions, w_h_in_inches):
+    print(len(jeonggan_labels), len(jg_positions))
     assert len(jeonggan_labels) == len(jg_positions)
     w, h = w_h_in_inches
     for label, jg_position in zip(jeonggan_labels, jg_positions):
-      if label == '0:5': continue
+      if label == '-:5': continue
       jng_dict = self.synth.label2dict(label)
       img = self.synth.get_blank(width=int(w*self.dpi), height=int(h*self.dpi))
-      jng_img = self.synth.generate_image_by_dict(img, jng_dict, apply_noise=False)
+      jng_img = self.synth.generate_image_by_dict(img, jng_dict, apply_noise=False, random_symbols=False)
       ax.imshow(jng_img, extent=(jg_position[0], jg_position[0] + w, jg_position[1], jg_position[1] + h))
 
 
@@ -96,8 +103,11 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser()
   parser.add_argument('--input_path', type=str, required=True)
   parser.add_argument('--output_path', type=str, default='test/jg_page/')
+  parser.add_argument('--num_jeonggans_per_gak', type=int, default=20)
+  parser.add_argument('--daegang_length', type=int, nargs='+', default=[6,4,4,6])
   
   args = parser.parse_args()
+  print(args.daegang_length)
   Path(args.output_path).mkdir(parents=True, exist_ok=True)
   
   with open(args.input_path, 'r') as f:
@@ -105,10 +115,13 @@ if __name__ == '__main__':
 
   jg_by_part = jg_text.split('\n\n')
   jg_by_part = [jg.split('\n') for jg in jg_by_part]
+  for i, part in enumerate(jg_by_part):
+    jg_by_part[i] = [gak for gak in part if len(gak.split('|')) > 1]
   
   drawer = JeongganboPageDrawer()
-  part_names = ['대금', '피리', '해금', '가야금', '거문고']
-  # part_names = ['대금', '피리', '해금', '아쟁', '가야금', '거문고']
+  # part_names = ['대금', '피리', '해금', '가야금', '거문고']
+  # part_names = ['대금', '해금', '피리', '가야금', '거문고']
+  part_names = ['대금', '피리', '해금', '아쟁', '가야금', '거문고']
   image_paths = []
   
   for i, part in enumerate(jg_by_part):
@@ -116,9 +129,12 @@ if __name__ == '__main__':
       selected_gaks = part[j*10:(j+1)*10]
       num_gaks = len(selected_gaks)
       jgs = [jg for gak in selected_gaks for jg in gak.split('|')]
-      fig, ax, jg_positions, w_h = drawer.draw_blank_page(num_gaks=num_gaks)
+      fig, ax, jg_positions, w_h = drawer.draw_blank_page(num_gaks=num_gaks, 
+                                                          num_jeonggans_per_gak=args.num_jeonggans_per_gak,
+                                                          daegang_length=args.daegang_length)
       drawer.draw_jeonggan(jgs, ax, jg_positions, w_h)
       ax.axis('off')
+      plt.text(0.5, 0.02, f"{part_names[i]} - {str(j+1)}", horizontalalignment='center', verticalalignment='center', transform=ax.transAxes, fontsize=12)
       plt.savefig(f'{args.output_path}{part_names[i]}_{j}.png', bbox_inches='tight', pad_inches=0, dpi=300)
       plt.close()
       print(f'{part_names[i]}_{j} is saved')

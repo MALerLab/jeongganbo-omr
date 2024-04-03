@@ -1,6 +1,3 @@
-
-
-
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -194,11 +191,10 @@ class QKVAttention(nn.Module):
     attention = self.mlp(attention)
     
     return attention
-  
 
 
 class TransformerOMR(nn.Module):
-  def __init__(self, dim, vocab_size, dropout=0.1) -> None:
+  def __init__(self, dim, vocab_size, enc_depth=2, dec_depth=6, num_heads=8, dropout=0.1) -> None:
     super().__init__()
     self.layers = nn.Sequential(
       ConvBlock(1, dim//4, 3, 1, 1),
@@ -219,10 +215,10 @@ class TransformerOMR(nn.Module):
       ConvBlock(dim, dim, 3, 1, 1),
     )
     
-    self.encoder = Encoder(dim=dim, depth=2, heads=8, attn_dropout=dropout, ff_dropout=dropout)
+    self.encoder = Encoder(dim=dim, depth=enc_depth, heads=num_heads, attn_dropout=dropout, ff_dropout=dropout)
     self.encoder_pos_enc = AbsolutePositionalEmbedding(dim, 100)
     self.dec_embedder = nn.Embedding(vocab_size, dim)
-    self.decoder = Decoder(dim=dim, depth=6, heads=8, attn_dropout=dropout, ff_dropout=dropout, cross_attn_dropout=dropout, cross_attend=True)
+    self.decoder = Decoder(dim=dim, depth=dec_depth, heads=num_heads, attn_dropout=dropout, ff_dropout=dropout, cross_attn_dropout=dropout, cross_attend=True)
     self.decoder_pos_enc = AbsolutePositionalEmbedding(dim, 100)
     self.proj = nn.Linear(dim, vocab_size)
   

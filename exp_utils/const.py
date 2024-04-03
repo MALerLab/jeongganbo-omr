@@ -36,11 +36,13 @@ COLOR_DICT = {
   'tae_uu': (255, 218, 150), 
 }
 
-PNAME_LIST = ['하하배황', '하하배대', '하하배태', '하하배협', '하하배고', '하하배중', '하하배유', '하하배임', '하하배이', '하하배남', '하하배무', '하하배응', '하배황', '하배대', '하배태', '하배협', '하배고', '하배중', '하배유', '하배임', '하배이', '하배남', '하배무', '하배응', '배황', '배대', '배태', '배협', '배고', '배중', '배유', '배임', '배이', '배남', '배무', '배응', '황', '대', '태', '협', '고', '중', '유', '임', '이', '남', '무', '응', '청황', '청대', '청태', '청협', '청고', '청중', '청유', '청임', '청이', '청남', '청무', '청응', '중청황', '중청대', '중청태', '중청협', '중청고', '중청중', '중청유', '중청임', '중청이', '중청남', '중청무', '중청응', '-']
+PNAME_LIST = ['하하배황', '하하배대', '하하배태', '하하배협', '하하배고', '하하배중', '하하배유', '하하배임', '하하배이', '하하배남', '하하배무', '하하배응', '하배황', '하배대', '하배태', '하배협', '하배고', '하배중', '하배유', '하배임', '하배이', '하배남', '하배무', '하배응', '배황', '배대', '배태', '배협', '배고', '배중', '배유', '배임', '배이', '배남', '배무', '배응', '황', '대', '태', '협', '고', '중', '유', '임', '이', '남', '무', '응', '청황', '청대', '청태', '청협', '청고', '청중', '청유', '청임', '청이', '청남', '청무', '청응', '중청황', '중청대', '중청태', '중청협', '중청고', '중청중', '중청유', '중청임', '중청이', '중청남', '중청무', '중청응', '-', '쉼표']
+
 PNAME_EN_LIST = ['hwang_ddd', 'dae_ddd', 'tae_ddd', 'hyeop_ddd', 'go_ddd', 'joong_ddd', 'yu_ddd', 'lim_ddd', 'ee_ddd', 'nam_ddd', 'mu_ddd', 'eung_ddd', 'hwang_dd', 'dae_dd', 'tae_dd', 'hyeop_dd', 'go_dd', 'joong_dd', 'yu_dd', 'lim_dd', 'ee_dd', 'nam_dd', 'mu_dd', 'eung_dd', 'hwang_d', 'dae_d', 'tae_d', 'hyeop_d', 'go_d', 'joong_d', 'yu_d', 'lim_d', 'ee_d', 'nam_d', 'mu_d', 'eung_d', 'hwang', 'dae', 'tae', 'hyeop', 'go', 'joong', 'yu', 'lim', 'ee', 'nam', 'mu', 'eung', 'hwang_u', 'dae_u', 'tae_u', 'hyeop_u', 'go_u', 'joong_u', 'yu_u', 'lim_u', 'ee_u', 'nam_u', 'mu_u', 'eung_u', 'hwang_uu', 'dae_uu', 'tae_uu', 'hyeop_uu', 'go_uu', 'joong_uu', 'yu_uu', 'lim_uu', 'ee_uu', 'nam_uu', 'mu_uu', 'eung_uu', 'conti', 'pause']
 
 SPECIAL_CHAR_TO_NAME = {
   '^': "니레",
+  'ㅅ': "니나",
   'ㄷ': "나니로",
   '(': "추성",
   ')': "퇴성",
@@ -203,12 +205,12 @@ PNAME_KR_TO_EN = {
 SYMBOL_W_DUR_LIST = ['노', '니', '로', '리', '니나*', '느나', '노라', '느니', '노라느니', '니레나', '네로나', '니로나', '니느라니', '느나니나', '느나르나니', '같은음표', '요성표', '겹요성표', '퇴성', '추성']
 SYMBOL_W_DUR_EN_LIST = ['no', 'ni', 'ro', 'ri', 'nina-dur', 'neuna', 'nora', 'neuni', 'noraneuni', 'nirena', 'nerona', 'nirona', 'nineurani', 'neunanina', 'neunareunani', 'repeat', 'shake', 'shake-rep', 'bend-down', 'bend-up']
 
-SYMBOL_WO_DUR_LIST = ['나니나', '나느나', '니레', '니나', '니로', '노네', '너녜', '노니로', '노리노', '네로네', '느네느', '나니로', '느로니르', '느니-르', '니루-니', '나니르노니르', '특강표', '늘임표', '흘림표', '겹흘림표', '반길이표', '덧길이표', '미는표', '떠이어표', '끊는표', '농음표', '풀어내림표', '싸랭', '슬기둥1', '슬기둥2', '슬기둥3', '전성', '자출']
+SYMBOL_WO_DUR_LIST = ['나니나', '나느나', '니레', '니나', '니로', '노네', '너녜', '노니로', '노리노', '네로네', '느네느', '나니로', '느로니르', '느니-르', '니루-니', '나니르노니르', '특강표', '늘임표', '흘림표', '겹흘림표', '반길이표', '덧길이표', '미는표', '떠이어표', '끊는표', '농음표', '풀어내림표', '싸랭', '슬기둥1', '슬기둥2', '슬기둥3', '전성', '자출', '잉어질표', '루러표', '시루표', '낮게', '서침표', '느니라', '반길이표/덧길이표', '덧길이표/반길이표']
 #'로니로', '격음표'
 
 SYMBOL_WO_DUR_ADD_EN_LIST = ['len-half/len-double', 'len-double/len-half']
 
-SYMBOL_WO_DUR_EN_LIST = ['nanina', 'naneuna', 'nire', 'nina', 'niro', 'none', 'neonye', 'noniro', 'norino', 'nerone', 'neuneneu', 'naniro', 'neuronireu', 'neunireu', 'niruni', 'nanireunonireu', 'accent', 'fermata', 'flow', 'flow-rep', 'len-half', 'len-double', 'push', 'roll', 'staccato', 'vib', 'vib-long', 'diff-str-fast', 'diff-str-1', 'diff-str-2', 'diff-str-3', 'roll-str', 'pizzicato'] + SYMBOL_WO_DUR_ADD_EN_LIST 
+SYMBOL_WO_DUR_EN_LIST = ['nanina', 'naneuna', 'nire', 'nina', 'niro', 'none', 'neonye', 'noniro', 'norino', 'nerone', 'neuneneu', 'naniro', 'neuronireu', 'neunireu', 'niruni', 'nanireunonireu', 'accent', 'fermata', 'flow', 'flow-rep', 'len-half', 'len-double', 'push', 'roll', 'staccato', 'vib', 'vib-long', 'diff-str-fast', 'diff-str-1', 'diff-str-2', 'diff-str-3', 'roll-str', 'pizzicato', 'splash', 'between-up', 'between-down', 'down-pitched', 'tongue', 'neunira'] + SYMBOL_WO_DUR_ADD_EN_LIST 
 # 'roniro', 'strike'
 
 SYMBOL_LIST = SYMBOL_W_DUR_LIST + SYMBOL_WO_DUR_LIST
@@ -297,6 +299,12 @@ SYMBOL_WO_DUR_EN_TO_KR = {
   'diff-str-3': '슬기둥3',
   'roll-str': '전성',
   'pizzicato': '자출',
+  'splash': '잉어질표',
+  'between-up': '루러표',
+  'between-down': '시루표',
+  'down-pitched': '낮게',
+  'tongue': '서침표',
+  'neunira': '느니라',
 }
 
 SYMBOL_WO_DUR_KR_TO_EN = {
@@ -336,6 +344,12 @@ SYMBOL_WO_DUR_KR_TO_EN = {
   '슬기둥3': 'diff-str-3',
   '전성': 'roll-str',
   '자출': 'pizzicato',
+  '잉어질표': 'splash',
+  '루러표': 'between-up',
+  '시루표': 'between-down',
+  '낮게': 'down-pitched',
+  '서침표': 'tongue',
+  '느니라': 'neunira',
 }
 
 

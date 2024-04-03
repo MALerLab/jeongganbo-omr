@@ -33,7 +33,7 @@ OCTAVE_RANGE = 6
 PITCH_ORDER = [
                                                                       'lim_ddd',  None,     None,       None,    None,
   'hwang_dd', None, 'tae_dd', 'hyeop_dd',  None,   'joong_dd', None,  'lim_dd',  'ee_dd',  'nam_dd',   'mu_dd',  None,
-  'hwang_d',  None, 'tae_d',  'hyeop_d',  'go_d',  'joong_d',  None,  'lim_d',   None,     'nam_d',    'mu_d',   'eung_d',
+  'hwang_d',  None, 'tae_d',  'hyeop_d',  'go_d',  'joong_d',  None,  'lim_d',   'ee_d',   'nam_d',    'mu_d',   'eung_d',
   'hwang',    None, 'tae',    'hyeop',    'go',    'joong',    None,  'lim',     'ee',     'nam',      'mu',     'eung',
   'hwang_u',  None, 'tae_u',  'hyeop_u',  'go_u',  'joong_u',  None,  'lim_u',   None,     'nam_u',    'mu_u',   None,
   'hwang_uu', None, 'tae_uu',
@@ -76,11 +76,11 @@ class JeongganSynthesizer:
         'rows': [
           { 
             'col_div': 1,
-            'cols': [ '0' ]
+            'cols': [ 'conti' ]
           }
         ]
       },
-      '0:5'
+      '-:5'
     )
     
     return label, img_w, img_h, jng_img
@@ -121,12 +121,14 @@ class JeongganSynthesizer:
   def get_jng_dict(plist, div=None, ornaments=True):
     if uniform(0, 1) > 0.98:
       return {'row_div': 1, 'rows': [{'col_div': 1, 'cols': ['conti']}]} # 2% chance empty jng
-    p_prob = [1] * len(plist) + [5, 1] + [0.2] * len(SYMBOL_W_DUR_EN_LIST)
+    
+    p_prob = [1] * len(plist) + [5, 1] + [0.5] * len(SYMBOL_W_DUR_EN_LIST)
     p_prob = np.asarray(p_prob) / sum(p_prob)
     plist = plist + ['conti', 'pause'] + SYMBOL_W_DUR_EN_LIST
+    
     sym_set = set(SYMBOL_WO_DUR_EN_LIST)
     
-    row_div = div if div else np.random.choice([1,2,3], 1, p=[0.45, 0.1, 0.45])[0]
+    row_div = div if div else np.random.choice([1,2,3], 1, p=[0.425, 0.15, 0.425])[0]
     
     res = {
       'row_div': row_div,
@@ -171,8 +173,10 @@ class JeongganSynthesizer:
     jng_dict = self.label2dict(label)
     
     img = self.get_blank(width, height)
-    if label=='-:5':
+    
+    if label=='-:5' or '':
       return self.add_layout_elements(img)
+    
     jng_img = self.generate_image_by_dict(img, jng_dict, apply_noise=apply_noise, random_symbols=random_symbols)
     
     if layout_elements:
@@ -226,7 +230,7 @@ class JeongganSynthesizer:
         
         if len(row) < 3 and random_symbols and randint(1, 10) > 7: # 30% chance
           el_name = 'ignore'
-          el_img = choice(self.img_dict[el_name]).copy() if bool(randint(0, 1)) else self.make_ignored_symbol()
+          el_img = choice(self.img_dict[el_name]).copy()
           el_img_dim = list(el_img.shape[:2])
           
           new_group.append( [ el_name, el_img_dim, el_img ])
@@ -584,11 +588,6 @@ class JeongganSynthesizer:
   def make_mark(cls, img, height):
     bg = cls.get_blank(img.shape[1], height)
     return cls.insert_img(bg, img, 0, MARK_HEIGHT//2 - img.shape[0]//2)
-  
-  def make_ignored_symbol(self):
-    sym_h, sym_w = choice(self.img_dict['ignore']).shape[:2]
-    sym_img = np.random.randint(0, 255, (sym_h, sym_w, 1), dtype=np.uint8)
-    return cv2.cvtColor(sym_img, cv2.COLOR_GRAY2RGBA)
     
   @staticmethod
   def dict2label(result_dict):
@@ -718,6 +717,8 @@ class JeongganSynthesizer:
         return (pos - 10)
       else:
         return (pos - 12) // row_div
+
+
 def get_img_paths(img_path_base, sub_dirs):
   if isinstance(img_path_base, str):
     img_path_base = Path(img_path_base)

@@ -15,7 +15,9 @@ class Inferencer:
                model_weights='model/synth_only_240313_002_best.pt', 
                device='cuda'):
     self.tokenizer = Tokenizer(vocab_txt_fn=vocab_txt_fn)
-    self.model = TransformerOMR(128, vocab_size=len(self.tokenizer.vocab))
+    self.model = TransformerOMR(128, vocab_size=len(self.tokenizer.vocab),
+                                enc_depth=8, dec_depth=4, num_heads=8, dropout=0.1                                
+                                )
     self.model.load_state_dict(torch.load(model_weights, map_location='cpu')['model'])
     self.model.eval()
     self.model.to(device)

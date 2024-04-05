@@ -9,7 +9,7 @@ from data_utils import JeongganboReader, Piece
 class MultipleParser:
   def __init__(self,
                png_dir='jeongganbo-png/pngs/',
-               out_dir='omr_results/multiple/',
+               out_dir='omr_results/multiple_0404/',
                piece_name_by_inst:dict=PIECE_NAME_BY_INST,
                start_page:dict=START_PAGE) -> None:
     self.reader = JeongganboReader(run_omr=True, omr_model_path='model/transformer_3M_aux_HL_best.pt')

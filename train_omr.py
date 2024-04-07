@@ -1,5 +1,7 @@
 import os, sys, getopt
+import random
 from pathlib import Path
+import numpy as np
 import hydra
 
 from omegaconf import OmegaConf, DictConfig
@@ -61,11 +63,16 @@ def debug():
 
 @hydra.main(config_path='configs/', config_name='config')
 def main(conf: DictConfig):
-  # conf = getConfs(argv)
-  
+  # project dir setting
   time_prefix = '-'.join('-'.join(os.getcwd().split('/')[-2:])[2:].split('-')[:-1]) # YY-MM-DD-HH-MM
   os.mkdir(os.path.join(os.getcwd(), 'model'))
   original_wd = Path(hydra.utils.get_original_cwd())
+  
+  # random seed setting
+  if conf.general.random_seed:
+    torch.manual_seed(conf.general.random_seed)
+    np.random.seed(conf.general.random_seed)
+    random.seed(conf.general.random_seed)
   
   wandb_run = None
   
@@ -97,10 +104,13 @@ def main(conf: DictConfig):
   
   train_batch_size = conf.dataloader.batch_size
   
-  if conf.data_path.train_aux:
+  if conf.data_path.train_aux and conf.dataloader.mix_aux:
     aux_batch_size = int(conf.dataloader.aux_ratio * conf.dataloader.batch_size)
     train_batch_size = conf.dataloader.batch_size - aux_batch_size
     aux_loader = DataLoader(aux_train_set, batch_size=aux_batch_size, shuffle=True, collate_fn=pad_collate, num_workers=conf.dataloader.num_workers_load, drop_last=True)
+  
+  elif conf.data_path.train_aux and not conf.dataloader.mix_aux:
+    aux_loader = DataLoader(aux_train_set, batch_size=train_batch_size, shuffle=True, collate_fn=pad_collate, num_workers=conf.dataloader.num_workers_load, drop_last=True)
   
   train_loader = DataLoader(train_set, batch_size=train_batch_size, shuffle=True, collate_fn=pad_collate, num_workers=conf.dataloader.num_workers_synth)
   

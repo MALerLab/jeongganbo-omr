@@ -1,6 +1,7 @@
 general:
   device: cuda:0
-  model_name: transformer_4M_aux
+  model_name: transformer_4M_with_aux
+  random_seed: false
 
 wandb:
   project: jeonggan-omr

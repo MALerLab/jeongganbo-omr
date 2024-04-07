@@ -6,14 +6,18 @@ metric:
   goal: maximize
   name: test_acc
 parameters:
-  model.lr: 
-    values: [1e-3, 1e-4]
-  model.dim:
-    values: [128, 256]
-  model.enc_depth:
-    values: [4, 6, 8]
-  model.dec_depth:
-    values: [4, 6, 8]
+  # general.random_seed:
+  #   values: [0, 1, 2, 3, 4]
+  model.dropout:
+    values: [0.1, 0.3, 0.6]
+  # model.lr: 
+  #   values: [1e-3, 1e-4]
+  # model.dim:
+  #   values: [128, 256]
+  # model.enc_depth:
+  #   values: [4, 6, 8]
+  # model.dec_depth:
+  #   values: [4, 6, 8]
 
 command:
 #  - ${env}

@@ -175,7 +175,10 @@ class JeongganSynthesizer:
     img = self.get_blank(width, height)
     
     if label=='-:5' or '':
-      return self.add_layout_elements(img)
+      if layout_elements:
+        return self.add_layout_elements(img)
+      
+      return img
     
     jng_img = self.generate_image_by_dict(img, jng_dict, apply_noise=apply_noise, random_symbols=random_symbols)
     

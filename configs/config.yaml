@@ -1,6 +1,6 @@
 general:
   device: cuda:0
-  model_name: transformer_with_aux_label
+  model_name: transformer_4M_aux
 
 wandb:
   project: jeonggan-omr
@@ -9,9 +9,9 @@ wandb:
   is_sweep: false
 
 data_path:
-  train: data/train/006_all_1711271837.csv
-  train_aux: data/low_confident_pairs.csv
-  valid_synthed: data/valid/006_all_1710296405.csv
+  train: data/train/008_4M_1712090605.csv
+  train_aux: low_confident_pairs_filtered.csv
+  valid_synthed: data/valid/008_4M_1712093199.csv
   valid_HL: data/valid/HL_valid_set.csv
   test: data/HL_test_set.csv
 
@@ -26,6 +26,6 @@ model:
   lr: 1e-3
   dim: 128
   num_heads: 8
-  enc_depth: 2
-  dec_depth: 6
+  enc_depth: 8
+  dec_depth: 4
   dropout: 0.1

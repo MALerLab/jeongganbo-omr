@@ -470,11 +470,12 @@ class Tokenizer:
     return ''.join([self.vocab[idx] for idx in labels if idx not in (0, 1, 2)])
 
 class Dataset:
-  def __init__(self, csv_path, img_path_dict, is_valid=False) -> None:
+  def __init__(self, csv_path, img_path_dict, synth_config={}, is_valid=False) -> None:
     self.df = pd.read_csv(csv_path)
     self.img_path_dict = img_path_dict
     self.jng_synth = self._make_jng_synth(img_path_dict)
     self.is_valid = is_valid
+    self.synth_config = synth_config
     self.need_random = not is_valid
 
     if self.is_valid:
@@ -506,12 +507,21 @@ class Dataset:
     annotation, width, height = itemgetter('label', 'width', 'height')(row)
     img = None
     
-    while True:
-      try:
-        img = self.jng_synth.generate_image_by_label(annotation, width, height, apply_noise=self.need_random, random_symbols=self.need_random, layout_elements=self.need_random)
-        break
-      except:
-        pass
+    if self.synth_config:
+      while True:
+        try:
+          img = self.jng_synth.generate_image_by_label(annotation, width, height, **self.synth_config)
+          break
+        except:
+          pass
+    
+    else:
+      while True:
+        try:
+          img = self.jng_synth.generate_image_by_label(annotation, width, height, char_variant=self.need_random, apply_noise=self.need_random, random_symbols=self.need_random, layout_elements=self.need_random)
+          break
+        except:
+          pass
     
     img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
     

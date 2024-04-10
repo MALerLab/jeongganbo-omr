@@ -12,10 +12,10 @@ wandb:
 
 data_path:
   train: data/train/008_4M_1712090605.csv
-  train_aux: low_confident_pairs_filtered.csv
+  train_aux: low_confident_pairs_filtered_nodups.csv
   valid_synthed: data/valid/008_4M_1712093199.csv
-  valid_HL: data/valid/HL_valid_set.csv
-  test: data/HL_test_set.csv
+  valid_HL: data/valid/HL_valid_set_nodups.csv
+  test: data/HL_test_set_nodups.csv
 
 dataloader:
   batch_size: 100

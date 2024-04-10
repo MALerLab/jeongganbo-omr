@@ -53,13 +53,22 @@ def getConfs(argv):
   
   return conf
 
-def debug():
-  conf = OmegaConf.load('configs/debug.yaml')
+@hydra.main(config_path='configs/', config_name='config')
+def debug(conf: DictConfig):
+# def debug():
+#   conf = OmegaConf.load('configs/debug.yaml')
+  print(type(conf.synth))
+  print(conf.synth)
   
-  wandb_run = None
-  original_wd = Path('')
+  print()
   
-  device = torch.device(conf.general.device)
+  print( type(dict(conf.synth)) )
+  print(dict(conf.synth))
+  
+  # wandb_run = None
+  # original_wd = Path('')
+  
+  # device = torch.device(conf.general.device)
 
 @hydra.main(config_path='configs/', config_name='config')
 def main(conf: DictConfig):
@@ -91,7 +100,7 @@ def main(conf: DictConfig):
   
   note_img_path_dict = get_img_paths(original_wd / 'test/synth/src', ['notes', 'symbols'])
   
-  train_set = Dataset(original_wd /conf.data_path.train, note_img_path_dict)
+  train_set = Dataset(original_wd /conf.data_path.train, note_img_path_dict, synth_config=dict(conf.synth))
   
   if conf.data_path.train_aux:
     aux_train_set = LabelStudioDataset(original_wd /conf.data_path.train_aux, original_wd / 'jeongganbo-png/splited-pngs')
@@ -210,3 +219,4 @@ def main(conf: DictConfig):
 
 if __name__ == "__main__":
   main()
+  # debug()

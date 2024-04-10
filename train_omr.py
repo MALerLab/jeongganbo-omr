@@ -80,8 +80,8 @@ def main(conf: DictConfig):
   # random seed setting
   if conf.general.random_seed:
     torch.manual_seed(conf.general.random_seed)
-    np.random.seed(conf.general_random_seed_synth)
-    random.seed(conf.general_random_seed_synth)
+    np.random.seed(conf.general.random_seed_synth)
+    random.seed(conf.general.random_seed_synth)
   
   wandb_run = None
   

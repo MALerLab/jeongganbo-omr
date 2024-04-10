@@ -1,10 +1,11 @@
 general:
   device: cuda:0
   model_name: transformer_4M_with_aux
-  random_seed: false
+  random_seed: 4
+  random_seed_synth: 4
 
 wandb:
-  project: jeonggan-omr
+  project: jeonggan-omr-ablation
   entity: team-halsoo
   do_log: true
   is_sweep: false

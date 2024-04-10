@@ -52,17 +52,17 @@ class JeongganSynthesizer:
         
       self.img_dict[key] = cv2.imread(path, cv2.IMREAD_UNCHANGED)
   
-  def __call__(self, range_limit=True, ornaments=True, apply_noise=True, random_symbols=True, layout_elements=True):
-    label, *_, jng_img = self.generate_single_data(range_limit=range_limit, ornaments=ornaments, apply_noise=apply_noise, random_symbols=random_symbols, layout_elements=layout_elements)
+  def __call__(self, range_limit=True, ornaments=True, char_variant=True, apply_noise=True, random_symbols=True, layout_elements=True):
+    label, *_, jng_img = self.generate_single_data(range_limit=range_limit, ornaments=ornaments, char_variant=char_variant, apply_noise=apply_noise, random_symbols=random_symbols, layout_elements=layout_elements)
     
     return label, jng_img
   
-  def generate_single_data(self, range_limit=True, ornaments=True, apply_noise=True, random_symbols=True, layout_elements=True):
+  def generate_single_data(self, range_limit=True, ornaments=True, char_variant=True, apply_noise=True, random_symbols=True, layout_elements=True):
     img_w, img_h = self.get_size()
     
     _, label = self.get_label_dict(range_limit=range_limit, ornaments=ornaments)
     
-    jng_img = self.generate_image_by_label(label, img_w, img_h, apply_noise=apply_noise, random_symbols=random_symbols, layout_elements=layout_elements)
+    jng_img = self.generate_image_by_label(label, img_w, img_h, char_variant=char_variant, apply_noise=apply_noise, random_symbols=random_symbols, layout_elements=layout_elements)
     
     return label, img_w, img_h, jng_img
   
@@ -169,7 +169,7 @@ class JeongganSynthesizer:
     return res
   
   # image generation
-  def generate_image_by_label(self, label, width, height, apply_noise=True, random_symbols=True, layout_elements=True):
+  def generate_image_by_label(self, label, width, height, char_variant=True, apply_noise=True, random_symbols=True, layout_elements=True):
     jng_dict = self.label2dict(label)
     
     img = self.get_blank(width, height)
@@ -180,14 +180,14 @@ class JeongganSynthesizer:
       
       return img
     
-    jng_img = self.generate_image_by_dict(img, jng_dict, apply_noise=apply_noise, random_symbols=random_symbols)
+    jng_img = self.generate_image_by_dict(img, jng_dict, char_variant=char_variant, apply_noise=apply_noise, random_symbols=random_symbols)
     
     if layout_elements:
       jng_img = self.add_layout_elements(jng_img)
     
     return jng_img
     
-  def generate_image_by_dict(self, img, dict, apply_noise=True, random_symbols=True):
+  def generate_image_by_dict(self, img, dict, char_variant=True, apply_noise=True, random_symbols=True):
     img_h, img_w = img.shape[:2]
     
     jng_arr = [ row['cols'] for row in dict['rows'] ]
@@ -215,7 +215,7 @@ class JeongganSynthesizer:
           el_img = self.img_dict[el_name_cp].copy()
           
           if isinstance(el_img, list):
-            if apply_noise:
+            if char_variant:
               el_img = choice(el_img).copy()
             else:
               el_img = el_img[0].copy()

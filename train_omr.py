@@ -112,6 +112,7 @@ def main(conf: DictConfig):
     test_set = LabelStudioDataset(original_wd / conf.data_path.test, original_wd / 'jeongganbo-png/splited-pngs')
   
   train_batch_size = conf.dataloader.batch_size
+  aux_loader = None
   
   if conf.data_path.train_aux and conf.dataloader.mix_aux:
     aux_batch_size = int(conf.dataloader.aux_ratio * conf.dataloader.batch_size)

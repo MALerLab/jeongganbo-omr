@@ -143,8 +143,9 @@ class JeongganboPageDrawer:
     print(f"Jeonggan cells populated: {len(jeonggan_labels)} / {len(jg_positions)}")
     assert len(jeonggan_labels) <= len(jg_positions)
     w, h = w_h_in_inches
-    for label, jg_position in zip(jeonggan_labels, jg_positions, strict=False):
+    for label, jg_position in zip(jeonggan_labels, jg_positions):
       if label == '-:5': continue
+      if label == '-:5\n' or label == '-:5 ': continue
       print(label)
       jng_dict = self.synth.label2dict(label)
       img = self.synth.get_blank(width=int(w*self.dpi), height=int(h*self.dpi))

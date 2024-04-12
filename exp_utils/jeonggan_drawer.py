@@ -121,7 +121,8 @@ if __name__ == '__main__':
   drawer = JeongganboPageDrawer()
   # part_names = ['대금', '피리', '해금', '가야금', '거문고']
   # part_names = ['대금', '해금', '피리', '가야금', '거문고']
-  part_names = ['대금', '피리', '해금', '아쟁', '가야금', '거문고']
+  # part_names = ['대금', '피리', '해금', '아쟁', '가야금', '거문고']
+  part_names = ['대금',  '해금', '아쟁', '가야금', '거문고', '피리']
   image_paths = []
   
   for i, part in enumerate(jg_by_part):

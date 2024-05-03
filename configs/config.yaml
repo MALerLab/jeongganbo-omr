@@ -18,14 +18,17 @@ data_path:
   test: data/HL_test_set_nodups.csv
 
 test_setting:
-  remove_borders: false
+  remove_borders: true
+  with_best: true
+  target_metric: 'exact_all'
 
 dataloader:
   batch_size: 100
-  aux_ratio: 0.2
+  aux_freq: 50
+  aux_ratio: 0.01
+  mix_aux: false
   num_workers_synth: 8
   num_workers_load: 4
-  mix_aux: false
 
 model:
   lr: 1e-3

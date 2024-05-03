@@ -1,3 +1,4 @@
+import logging
 import random
 import re
 from pathlib import Path
@@ -35,23 +36,31 @@ class Trainer:
                device,
                scheduler=None, 
                aux_loader=None,
-               aux_valid_loader=None,
+               aux_freq=50,
                mix_aux=False,
+               aux_valid_loader=None,
                wandb=None, 
                model_name='nmt_model', 
-               model_save_path='model'):
+               model_save_path='model',
+               checkpoint_logger=None):
 
     self.model = model
     self.optimizer = optimizer
     self.scheduler = scheduler
     self.loss_fn = loss_fn
+    
     self.train_loader = train_loader
     self.valid_loader = valid_loader
     self.aux_loader = aux_loader
+    
+    self.aux_freq = aux_freq
     self.mix_aux = mix_aux
+    
     self.aux_valid_loader = aux_valid_loader
     self.tokenizer = tokenizer
     self.wandb = wandb
+    self.checkpoint_logger = checkpoint_logger
+    self.log_format = '%(metric_name)s, %(iter)s, %(acc)s'
     
     self.device = device
     self.model.to(device)
@@ -59,10 +68,22 @@ class Trainer:
     self.training_loss = []
     
     self.grad_clip = 1.0
-    self.validation_acc = []
-    self.HL_validation_acc = []
-    self.best_valid_accuracy = 0
-    self.best_HL_valid_accuracy = 0
+    
+    self.valid_metrics = {
+      'valid_acc': (0, []),
+      'exact_all': (0, []),
+      'exact_pos': (0, []),
+      'exact_note': (0, []),
+      'exact_length': (0, []),
+    }
+    
+    self.HL_valid_metrics = {
+      'valid_acc': (0, []),
+      'exact_all': (0, []),
+      'exact_pos': (0, []), 
+      'exact_note': (0, []), 
+      'exact_length': (0, []), 
+    }
     
     self.model_name = model_name 
     self.model_save_path = Path(model_save_path)
@@ -92,6 +113,7 @@ class Trainer:
           train_partial_batch = batch[part_idx]
           aux_partial_batch = aux_batch[part_idx]
           
+          # mix pad collate
           if part_idx > 0:
             max_token_len = max(train_partial_batch.shape[1], aux_partial_batch.shape[1])
             train_padded = torch.zeros((train_partial_batch.shape[0], max_token_len), dtype=torch.long)
@@ -121,7 +143,7 @@ class Trainer:
         )
       
       # aux train
-      if self.aux_loader and not self.mix_aux and b_idx % 50 == 0:
+      if self.aux_loader and not self.mix_aux and b_idx + 1 % self.aux_freq == 0:
         try :
           aux_batch = next(aux_iterator)
         except StopIteration:
@@ -143,17 +165,24 @@ class Trainer:
         # synthed
         self.model.eval()
         validation_acc, metric_dict = self.validate()
-        self.validation_acc.append(validation_acc)
-
-        if validation_acc > self.best_valid_accuracy:
-          print(f"Saving the model with best validation accuracy: valid #{(b_idx+1) // 500}, Acc: {validation_acc:.4f} ")
-          self.save_model(f'{self.model_name}_best.pt')
-        else:
-          self.save_model(f'{self.model_name}_last.pt')
-          
-        self.best_valid_accuracy = max(validation_acc, self.best_valid_accuracy)
-        
         metric_dict['valid_acc'] = validation_acc
+        
+        for metric_name in metric_dict.keys():
+          metric_best, metric_list = self.valid_metrics[metric_name]
+          metric_cur = metric_dict[metric_name]
+          
+          metric_list.append(metric_cur)
+          
+          if metric_cur > metric_best:
+            print(f"best {metric_name} at iter #{ b_idx+1 }, Acc: {metric_cur:.4f}")
+            self.checkpoint_logger.info(self.log_format % { 'metric_name': metric_name, 'iter': b_idx + 1, 'acc': metric_cur })  
+            self.save_model(f'{self.model_name}_{metric_name}_best.pt')
+          
+          else:
+            self.save_model(f'{self.model_name}_{metric_name}_last.pt')
+            
+          new_metric_best = max(metric_cur, metric_best)
+          self.valid_metrics[metric_name] = (new_metric_best, metric_list)
         
         if self.wandb:
           self.wandb.log(metric_dict, step=b_idx)
@@ -161,17 +190,24 @@ class Trainer:
         # HL
         self.model.eval()
         HL_validation_acc, HL_metric_dict = self.validate(external_loader=self.aux_valid_loader)
-        self.HL_validation_acc.append(HL_validation_acc)
-
-        if HL_validation_acc > self.best_HL_valid_accuracy:
-          print(f"Saving the model with best HL validation accuracy: valid #{(b_idx+1) // 500}, Acc: {HL_validation_acc:.4f} ")
-          self.save_model(f'{self.model_name}_HL_best.pt')
-        else:
-          self.save_model(f'{self.model_name}_HL_last.pt')
-          
-        self.best_HL_valid_accuracy = max(HL_validation_acc, self.best_HL_valid_accuracy)
-        
         HL_metric_dict['valid_acc'] = HL_validation_acc
+        
+        for metric_name in HL_metric_dict.keys():
+          metric_best, metric_list = self.HL_valid_metrics[metric_name]
+          metric_cur = HL_metric_dict[metric_name]
+          
+          metric_list.append(metric_cur)
+          
+          if metric_cur > metric_best:
+            print(f"best HL {metric_name} at iter #{ b_idx+1 }, Acc: {metric_cur:.4f}")
+            self.checkpoint_logger.info(self.log_format % { 'metric_name': f'HL_{metric_name}', 'iter': b_idx + 1, 'acc': metric_cur })  
+            self.save_model(f'{self.model_name}_HL_{metric_name}_best.pt')
+          
+          else:
+            self.save_model(f'{self.model_name}_HL_{metric_name}_last.pt')
+            
+          new_metric_best = max(metric_cur, metric_best)
+          self.HL_valid_metrics[metric_name] = (new_metric_best, metric_list)
         
         HL_metric_dict = { f'HL_{key}': value for key, value in HL_metric_dict.items() }
         

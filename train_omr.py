@@ -1,4 +1,5 @@
 import os, sys, getopt
+import logging
 import random
 from pathlib import Path
 import numpy as np
@@ -53,17 +54,12 @@ def getConfs(argv):
   
   return conf
 
-@hydra.main(config_path='configs/', config_name='config')
-def debug(conf: DictConfig):
-# def debug():
-#   conf = OmegaConf.load('configs/debug.yaml')
-  print(type(conf.synth))
-  print(conf.synth)
-  
-  print()
-  
-  print( type(dict(conf.synth)) )
-  print(dict(conf.synth))
+# @hydra.main(config_path='configs/', config_name='config')
+# def debug(conf: DictConfig):
+def debug():
+  conf = OmegaConf.load('configs/debug.yaml')
+  # print(type(conf.synth))
+  # print(conf.synth)
   
   # wandb_run = None
   # original_wd = Path('')
@@ -154,6 +150,9 @@ def main(conf: DictConfig):
   model = TransformerOMR(conf.model.dim, len(tokenizer.vocab), enc_depth=conf.model.enc_depth, dec_depth=conf.model.dec_depth, num_heads=8, dropout=conf.model.dropout)
   optimizer = torch.optim.Adam(model.parameters(), lr=conf.model.lr)
   scheduler = CosineLRScheduler(optimizer, warmup_steps=1000, total_steps=len(train_loader), lr_min_ratio=0.0001, cycle_length=1.0)
+  
+  logger = logging.getLogger(__name__)
+  logging.basicConfig(filename='best_checkpoint_log.csv', format='%(message)s', level=logging.INFO)
 
   trainer = Trainer(model, 
                     optimizer, 
@@ -163,12 +162,14 @@ def main(conf: DictConfig):
                     tokenizer,
                     scheduler=scheduler,
                     aux_loader=aux_loader if aux_loader else None,
-                    aux_valid_loader=valid_HL_loader,
+                    aux_freq=conf.dataloader.aux_freq,
                     mix_aux=conf.dataloader.mix_aux,
+                    aux_valid_loader=valid_HL_loader,
                     device=device, 
                     wandb=wandb_run, 
                     model_name=conf.general.model_name,
-                    model_save_path='model')
+                    model_save_path='model',
+                    checkpoint_logger=logger)
   
   print('COMPLETE: model initializing')
   
@@ -202,9 +203,36 @@ def main(conf: DictConfig):
   print('COMPLETE: Post training logging - Last HL Validation')
   
   if conf.data_path.test:
-    print('\nStart: Post training logging - Test')  
-    test_acc, test_metric_dict, test_pred_list, test_confi_list = trainer.validate(external_loader=test_loader, with_confidence=True)
-    test_bot_30 = draw_low_confidence_plot(test_set, test_confi_list, test_pred_list)
+    print('\nStart: Post training logging - Test')
+    
+    if conf.test_setting.with_best:
+      test_model = TransformerOMR(conf.model.dim, len(tokenizer.vocab), enc_depth=conf.model.enc_depth, dec_depth=conf.model.dec_depth, num_heads=8, dropout=conf.model.dropout)
+      
+      test_model.load_state_dict(torch.load(f'model/{conf.general.model_name}_HL_{conf.test_setting.target_metric}_best.pt', map_location='cpu')['model'])
+      
+      tester = Trainer(test_model, 
+                        None, 
+                        None, 
+                        None, 
+                        test_loader, 
+                        tokenizer,
+                        scheduler=None,
+                        aux_loader=None,
+                        aux_freq=None,
+                        mix_aux=None,
+                        aux_valid_loader=None,
+                        device=device, 
+                        wandb=wandb_run, 
+                        model_name=conf.general.model_name,
+                        model_save_path='model',
+                        checkpoint_logger=None)
+      
+      test_acc, test_metric_dict, test_pred_list, test_confi_list = tester.validate(with_confidence=True)
+      test_bot_30 = draw_low_confidence_plot(test_set, test_confi_list, test_pred_list)
+    
+    else:
+      test_acc, test_metric_dict, test_pred_list, test_confi_list = trainer.validate(external_loader=test_loader, with_confidence=True)
+      test_bot_30 = draw_low_confidence_plot(test_set, test_confi_list, test_pred_list)
     
     if conf.wandb.do_log:
       wandb_run.log({
@@ -214,7 +242,7 @@ def main(conf: DictConfig):
     
     if conf.wandb.is_sweep:
       wandb_run.log({
-            'test_acc': test_acc
+        'test_acc': test_acc
       })
     print('COMPLETE: Post training logging - Test')
 

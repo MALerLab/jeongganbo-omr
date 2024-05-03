@@ -1,31 +1,37 @@
 general:
-  device: cuda:1
-  model_name: transformer_with_aux_label
+  device: cuda:0
+  model_name: transformer_4M_with_aux
+  random_seed: 4
+  random_seed_synth: 4
 
 wandb:
-  project: my-first-sweep
+  project: jeonggan-omr-ablation
   entity: team-halsoo
-  do_log: false
+  do_log: true
   is_sweep: false
 
 data_path:
-  train: data/debug_train.csv
-  train_aux: data/debug_train_aux.csv
-  valid_synthed: data/valid/006_all_1710296405.csv
-  valid_HL: data/valid/HL_valid_set.csv
-  test: data/debug_test.csv
+  train: data/train/008_4M_1712090605.csv
+  train_aux: low_confident_pairs_filtered.csv
+  valid_synthed: data/valid/008_4M_1712093199.csv
+  valid_HL: data/valid/HL_valid_set_nodups.csv
+  test: data/HL_test_set_nodups.csv
+
+test_setting:
+  remove_borders: false
 
 dataloader:
-  batch_size: 100
-  aux_ratio: 0.2
+  batch_size: 101
+  aux_freq: 50
+  aux_ratio: 0.01
+  mix_aux: false
   num_workers_synth: 8
   num_workers_load: 4
-  mix_aux: false
 
 model:
   lr: 1e-3
   dim: 128
   num_heads: 8
-  enc_depth: 2
-  dec_depth: 6
+  enc_depth: 8
+  dec_depth: 4
   dropout: 0.1

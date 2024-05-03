@@ -109,7 +109,7 @@ def main(conf: DictConfig):
   valid_set_HL = LabelStudioDataset(original_wd /conf.data_path.valid_HL, original_wd / 'jeongganbo-png/splited-pngs')
   
   if conf.data_path.test:
-    test_set = LabelStudioDataset(original_wd / conf.data_path.test, original_wd / 'jeongganbo-png/splited-pngs')
+    test_set = LabelStudioDataset(original_wd / conf.data_path.test, original_wd / 'jeongganbo-png/splited-pngs', remove_borders=conf.test_setting.remove_borders)
   
   train_batch_size = conf.dataloader.batch_size
   aux_loader = None

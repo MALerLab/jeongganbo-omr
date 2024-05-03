@@ -536,11 +536,12 @@ class Dataset:
     return img, self.tokenizer(annotation)
 
 class LabelStudioDataset(Dataset):
-  def __init__(self, csv_path, img_path_dir, is_valid=False) -> None:
+  def __init__(self, csv_path, img_path_dir, is_valid=False, remove_borders=False) -> None:
     super().__init__(csv_path, None, is_valid)
     self.img_path_dir = Path(img_path_dir)
     assert self.img_path_dir.exists()
     
+    self.remove_borders = remove_borders
     
   @staticmethod
   def _make_jng_synth(img_path_dict):
@@ -550,6 +551,9 @@ class LabelStudioDataset(Dataset):
     row = self.df.iloc[idx]
     path, annotation = itemgetter('Filename', 'Annotations')(row)
     img = cv2.imread(str(self.img_path_dir / path))
+    
+    if self.remove_borders:
+      img = JeongganProcessor.remove_borders(img)
     
     return img, annotation
 

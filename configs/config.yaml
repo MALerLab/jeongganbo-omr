@@ -17,6 +17,9 @@ data_path:
   valid_HL: data/valid/HL_valid_set_nodups.csv
   test: data/HL_test_set_nodups.csv
 
+test_setting:
+  remove_borders: false
+
 dataloader:
   batch_size: 100
   aux_ratio: 0.2

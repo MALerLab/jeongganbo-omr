@@ -143,7 +143,7 @@ class Trainer:
         )
       
       # aux train
-      if self.aux_loader and not self.mix_aux and b_idx + 1 % self.aux_freq == 0:
+      if self.aux_loader and not self.mix_aux and b_idx % self.aux_freq == 0:
         try :
           aux_batch = next(aux_iterator)
         except StopIteration:
@@ -160,6 +160,10 @@ class Trainer:
             step=b_idx
           )
       
+      if (b_idx + 1) % 10_000 == 0:
+        print(f'Saving checkpoint after {b_idx + 1} iterations')
+        self.save_model(f'{self.model_name}_{b_idx + 1}.pt')
+      
       # validation
       if (b_idx+1) % 500 == 0:
         # synthed
@@ -168,6 +172,9 @@ class Trainer:
         metric_dict['valid_acc'] = validation_acc
         
         for metric_name in metric_dict.keys():
+          if metric_name in ('note_pitch', 'note_pcalss'):
+            continue
+          
           metric_best, metric_list = self.valid_metrics[metric_name]
           metric_cur = metric_dict[metric_name]
           
@@ -193,6 +200,9 @@ class Trainer:
         HL_metric_dict['valid_acc'] = HL_validation_acc
         
         for metric_name in HL_metric_dict.keys():
+          if metric_name in ('note_pitch', 'note_pcalss'):
+            continue
+          
           metric_best, metric_list = self.HL_valid_metrics[metric_name]
           metric_cur = HL_metric_dict[metric_name]
           

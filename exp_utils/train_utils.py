@@ -342,7 +342,7 @@ class Trainer:
       new_pred.append(prd[1:])
     
     new_pred = np.stack(new_pred, axis=0)
-    new_pred = torch.tensor(new_pred, dtype=torch.float64)
+    new_pred = torch.tensor(new_pred, dtype=torch.long)
     
     return new_pred
   
@@ -583,7 +583,7 @@ class Dataset:
 
 class LabelStudioDataset(Dataset):
   def __init__(self, csv_path, img_path_dir, is_valid=False, remove_borders=False) -> None:
-    super().__init__(csv_path, None, is_valid)
+    super().__init__(csv_path, None, is_valid=is_valid)
     self.img_path_dir = Path(img_path_dir)
     assert self.img_path_dir.exists()
     

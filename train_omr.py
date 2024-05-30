@@ -102,10 +102,10 @@ def main(conf: DictConfig):
     aux_train_set = LabelStudioDataset(original_wd /conf.data_path.train_aux, original_wd / 'jeongganbo-png/splited-pngs')
   
   valid_set_synthed = Dataset(original_wd /conf.data_path.valid_synthed, note_img_path_dict, is_valid=True)
-  valid_set_HL = LabelStudioDataset(original_wd /conf.data_path.valid_HL, original_wd / 'jeongganbo-png/splited-pngs')
+  valid_set_HL = LabelStudioDataset(original_wd /conf.data_path.valid_HL, original_wd / 'jeongganbo-png/splited-pngs', remove_borders=True, is_valid=True)
   
   if conf.data_path.test:
-    test_set = LabelStudioDataset(original_wd / conf.data_path.test, original_wd / 'jeongganbo-png/splited-pngs', remove_borders=conf.test_setting.remove_borders)
+    test_set = LabelStudioDataset(original_wd / conf.data_path.test, original_wd / 'jeongganbo-png/splited-pngs', remove_borders=conf.test_setting.remove_borders, is_valid=True)
   
   train_batch_size = conf.dataloader.batch_size
   aux_loader = None

@@ -1,6 +1,7 @@
 from time import time
 from random import randint, choice, uniform, seed
-from collections import defaultdict
+from operator import itemgetter
+from collections import defaultdict, Counter
 import re
 
 from pathlib import Path
@@ -16,6 +17,8 @@ from omegaconf import OmegaConf, DictConfig
 
 import cv2
 import numpy as np
+import Levenshtein
+
 import torch
 from torch.utils.data import DataLoader
 
@@ -245,16 +248,38 @@ def test(project_root_dir, exp_dir, csv_path):
   
   print('\n...calculating metrics...')
   
-  num_metrics = 6
-  metric_ls = [ [] for _ in range(num_metrics) ] # ner, per, nper, oer, oper, onper
+  metric_names = ('ner', 'per', 'nper', 'oer', 'oper', 'opner', 'EMR', 'NMR', 'PMR', 'OrMR', 'dist', 'dist/len', 'insert', 'del', 'sub')
+  num_metrics = len(metric_names)
+  metric_ls = [ [] for _ in range(num_metrics) ]
   
   for case in pred_list:
     label, pred = case[2:4]
     
-    _, metric_values = calc_all_metrics(tokenizer, label, pred)
+    # (note_p, pos_p, note_pos_p, orn_p, orn_pos_p, orn_note_pos_p)
+    (note_pair, pos_pair, _, orn_pair, *_), metric_values = calc_all_metrics(tokenizer, label, pred)
     
     for m_idx, mv in enumerate(metric_values):
       metric_ls[m_idx].append(mv)
+    
+    is_note_match = int(Levenshtein.distance(note_pair[0], note_pair[1]) == 0)
+    is_pos_match = int(Levenshtein.distance(pos_pair[0], pos_pair[1]) == 0)
+    is_orn_match = int(Levenshtein.distance(orn_pair[0], orn_pair[1]) == 0)
+    
+    
+    metric_ls[-9].append( (None, None, int(Levenshtein.distance(label, pred) == 0)) )
+    metric_ls[-8].append( (None, None, is_note_match) )
+    metric_ls[-7].append( (None, None, is_pos_match) )
+    metric_ls[-6].append( (None, None, is_orn_match) )
+    
+    
+    edit_ops = Levenshtein.editops(pred, label) # src, target order
+    edit_dist = len(edit_ops)
+    dist_len_ratio = edit_dist / len(label)
+    edit_ops_cnt = Counter( [ op[0] for op in edit_ops ] )
+    insert, delete, replace = itemgetter('insert', 'delete', 'replace')(edit_ops_cnt)
+    
+    for i, val in enumerate( (edit_dist, dist_len_ratio, insert, delete, replace) ):
+      metric_ls[-5 + i].append( (None, None, val) )
   
   # print(len(pred_list))
   # print(len(metric_ls)) # should be 6
@@ -269,7 +294,12 @@ def test(project_root_dir, exp_dir, csv_path):
     
     for subm_i in range(3):
       subm_ls = [ subm_t[subm_i] for subm_t in mv_ls if subm_t[subm_i] != None ]
-      avg_subm = sum(subm_ls) / len(subm_ls)
+      
+      avg_subm = None
+      
+      if len(subm_ls) > 0:
+        avg_subm = sum(subm_ls) / len(subm_ls)
+      
       avg_mv.append( avg_subm )
     
     avg_metric_ls.append(tuple(avg_mv))
@@ -279,7 +309,6 @@ def test(project_root_dir, exp_dir, csv_path):
   # print(len(avg_metric_ls[1])) # 3
   # print()
   
-  metric_names = ('ner', 'per', 'nper', 'oer', 'oper', 'opner')
   for m_name, avg_mv in zip(metric_names, avg_metric_ls):
     print(m_name, avg_mv)
   
@@ -287,8 +316,7 @@ def test(project_root_dir, exp_dir, csv_path):
   
   with open(csv_path, 'a', newline='', encoding='utf-8') as f:
     writer = csv.writer(f)
-    # writer.writerow([conf.general.model_name, metric_dict[conf.test_setting.target_metric]] + metric_values)
-    writer.writerow( [conf.general.model_name, exact_all] + [mv_t[2] for mv_t in avg_metric_ls] )
+    writer.writerow( [conf.general.model_name, exact_all] + [mv_t[-1] for mv_t in avg_metric_ls] )
   
   print('COMPLETE: calculating metrics')
 

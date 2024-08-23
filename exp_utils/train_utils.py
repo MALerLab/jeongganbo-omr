@@ -510,9 +510,14 @@ class Tokenizer:
 
   def decode(self, labels):
     if isinstance(labels, torch.Tensor):
+      if labels.ndim == 2:
+        labels = labels.squeeze(0)
+      
       labels = labels.tolist()
+    
     if 2 in labels:
       labels = labels[:labels.index(2)]
+    
     return ''.join([self.vocab[idx] for idx in labels if idx not in (0, 1, 2)])
 
 class Dataset:

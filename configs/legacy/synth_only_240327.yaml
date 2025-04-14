@@ -1,0 +1,11 @@
+project_name: 'jeonggan-omr'
+model_name: 'transformer_with_aux_label_240327'
+wandb_entity: 'team-halsoo'
+device: 'cuda:1'
+train_set_path: 'data/train/006_all_1711271837.csv'
+valid_set_path: 'data/valid/006_all_1710296405.csv'
+aux_train_set_path: 'data/low_confident_pairs.csv'
+test_set_path: 'data/labels_from_ls_cleaned.csv'
+train_batch_size: 100
+
+wandb_notes: "log last validation and test result, bottom-30 jeonggan image plot"

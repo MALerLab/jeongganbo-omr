@@ -1,19 +1,24 @@
 notebooks_local/
+outputs/
 
 pdfs/
 pngs/
+prev_results/
 !test/
 test/*
 !test/daegeum/
+!test/synth/
 
 graphs/
 data/
+model/
 
 wandb/
 
 __pycache__/
-Pipfile.lock
 
 .DS_Store
+.vscode/
 old_pngs/
 title_pngs/
+error_jeonggans/

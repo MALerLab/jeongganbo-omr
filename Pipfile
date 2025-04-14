@@ -17,6 +17,10 @@ torch = "==2.0.1"
 torchvision = "==0.15.2"
 wandb = "*"
 omegaconf = "*"
+x-transformers = "*"
+music21 = "*"
+hydra-core = "*"
+levenshtein = "*"
 
 [dev-packages]
 ipykernel = "*"

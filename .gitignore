@@ -1,7 +1,9 @@
 notebooks_local/
+outputs/
 
 pdfs/
 pngs/
+prev_results/
 !test/
 test/*
 !test/daegeum/
@@ -16,5 +18,7 @@ wandb/
 __pycache__/
 
 .DS_Store
+.vscode/
 old_pngs/
 title_pngs/
+error_jeonggans/

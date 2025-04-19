@@ -17,54 +17,6 @@ from exp_utils.model_zoo import OMRModel, TransformerOMR
 from exp_utils.train_utils import CosineLRScheduler, Dataset, pad_collate, Trainer, get_nll_loss, LabelStudioDataset, draw_low_confidence_plot
 
 
-def getConfs(argv):
-  args = argv[1:]
-  
-  try:
-    opt_list, _ = getopt.getopt(args, 'f:n:p:e:')
-    
-  except getopt.GetoptError:
-    print('somethings gone wrong')
-    return None
-
-  opt_dict = {}
-  
-  for opt in opt_list:
-    name, value = opt 
-    name = name.replace('-', '')
-    
-    if value:
-      opt_dict[name] = value
-    else:
-      opt_dict[name] = name
-    
-  conf = OmegaConf.load(opt_dict['f'])
-  
-  if opt_dict.get('e'):
-    num_epoch_arg = int(opt_dict['e'])
-    conf.num_epoch = num_epoch_arg
-    
-  if opt_dict.get('n'):
-    name_arg = opt_dict['n']
-    conf.run_name = name_arg
-    
-  if opt_dict.get('p'):
-    project_arg = opt_dict['p']
-    conf.project_name = project_arg
-  
-  return conf
-
-# @hydra.main(config_path='configs/', config_name='config')
-# def debug(conf: DictConfig):
-def debug():
-  conf = OmegaConf.load('configs/debug.yaml')
-  # print(type(conf.synth))
-  # print(conf.synth)
-  
-  # wandb_run = None
-  # original_wd = Path('')
-  
-  # device = torch.device(conf.general.device)
 
 @hydra.main(config_path='configs/', config_name='config')
 def main(conf: DictConfig):

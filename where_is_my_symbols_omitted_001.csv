@@ -1,0 +1,17 @@
+symbol_name,img_path,bbox,conf
+test/synth/src/notes/hwang.png,test/split_pngs/독주곡-헌천수_daegeum_75.png,"(38, 62, 89, 114)",0.77668506
+test/synth/src/notes/hyeop_dd.png,test/split_pngs/현악취타-길타령_gayageum_29.png,"(27, 25, 75, 67)",0.7352472
+test/synth/src/symbols/diff-str-2_002.png,test/split_pngs/보허사_geomungo_234.png,"(74, 49, 100, 113)",0.6243901
+test/synth/src/symbols/diff-str-fast_003.png,test/split_pngs/현악취타-취타_geomungo_180.png,"(73, 35, 99, 88)",0.68871033
+test/synth/src/symbols/fermata_002.png,test/split_pngs/영산회상-염불도드리_haegeum_67.png,"(51, 43, 67, 61)",0.7066075
+test/synth/src/symbols/ignore_001.png,test/split_pngs/밑도드리_geomungo_341.png,"(76, 67, 98, 86)",0.6432872
+test/synth/src/symbols/ignore_002.png,test/split_pngs/영산회상-중령산_haegeum_356.png,"(81, 120, 101, 134)",0.74729764
+test/synth/src/symbols/ignore_003.png,test/split_pngs/밑도드리_geomungo_341.png,"(76, 64, 98, 86)",0.67877305
+test/synth/src/symbols/ignore_026.png,test/split_pngs/여창계면-편수대엽_geomungo_109.png,"(73, 17, 99, 95)",0.6666372
+test/synth/src/symbols/ignore_041.png,test/split_pngs/여민락_haegeum_2411.png,"(42, 51, 66, 72)",0.6267228
+test/synth/src/symbols/neunanina_001.png,test/split_pngs/여민락_piri_1476.png,"(64, 58, 89, 72)",0.6261988
+test/synth/src/symbols/nineurani_001.png,test/split_pngs/평조회상-상령산_daegeum_263.png,"(37, 84, 66, 100)",0.6641791
+test/synth/src/symbols/niro_001.png,test/split_pngs/독주곡-청성자진한잎_daegeum_210.png,"(81, 37, 96, 55)",0.78356516
+test/synth/src/symbols/no_002.png,test/split_pngs/밑도드리_geomungo_195.png,"(73, 50, 100, 86)",0.6233411
+test/synth/src/symbols/shake-rep_002.png,test/split_pngs/영산회상-상령산_piri_150.png,"(65, 72, 91, 115)",0.77323705
+test/synth/src/symbols/shake_002.png,test/split_pngs/여민락_ajaeng_371.png,"(37, 40, 61, 85)",0.7541703

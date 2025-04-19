@@ -1,0 +1,6 @@
+symbol_name,img_path,bbox,conf
+test/synth/src/symbols/fermata_002.png,test/split_pngs/남창우조-중거_haegeum_240.png,"(82, 18, 98, 36)",0.9313393
+test/synth/src/symbols/ignore_041.png,test/split_pngs/남창우조-중거_haegeum_240.png,"(73, 18, 97, 39)",0.9624551
+test/synth/src/symbols/neunanina_001.png,test/split_pngs/여민락_piri_2139.png,"(69, 45, 94, 59)",0.85660195
+test/synth/src/symbols/nineurani_001.png,test/split_pngs/남창우조-중거_haegeum_240.png,"(72, 19, 101, 35)",0.8058505
+test/synth/src/symbols/niro_001.png,test/split_pngs/독주곡-상령산_piri_12.png,"(62, 65, 77, 83)",1.0

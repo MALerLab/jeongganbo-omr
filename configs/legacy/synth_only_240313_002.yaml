@@ -1,8 +1,0 @@
-project_name: 'jeonggan-omr'
-model_name: 'synth_only_240313_002'
-train_set_path: 'data/train/006_all_1710293115.csv'
-valid_set_path: 'data/valid/006_all_1710296405.csv'
-
-train_batch_size: 100
-
-wandb_notes: "train data*2, daegeum ornaments + random symbols and layouts for all Jeonggans"

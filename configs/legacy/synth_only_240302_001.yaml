@@ -1,8 +1,0 @@
-project_name: 'jeonggan-omr'
-model_name: 'synth_only_240302_001'
-train_set_path: 'data/train/004_daegeum_1709356499.csv'
-valid_set_path: 'data/valid/004_daegeum_1709357143.csv'
-
-train_batch_size: 100
-
-wandb_notes: "add symbols for daegeum Jeongganbo"

@@ -1,13 +1,13 @@
 general:
-  device: cuda:0
-  model_name: transformer_4M_with_aux
-  random_seed: 4
+  device: cuda:1
+  model_name: jeongganbo_omr
+  random_seed: 2
   random_seed_synth: 4
 
 wandb:
-  project: jeonggan-omr-ablation
-  entity: team-halsoo
-  do_log: true
+  project: jeonggan-omr
+  entity: <YOUR_WANDB_ENTITY>
+  do_log: false
   is_sweep: false
 
 data_path:
@@ -24,7 +24,7 @@ test_setting:
 
 dataloader:
   batch_size: 100
-  aux_freq: 50
+  aux_freq: 100
   aux_ratio: 0.01
   mix_aux: false
   num_workers_synth: 8

@@ -1,0 +1,4 @@
+symbol_name,img_path,bbox,conf
+test/synth/src/notes/eung.png,test/split_pngs/관악영산회상-상령산_piri_187.png,"(37, 33, 83, 79)",0.39119133
+test/synth/src/notes/eung_d.png,test/split_pngs/남창우조-두거_piri_208.png,"(28, 85, 75, 129)",0.3879301
+test/synth/src/symbols/ignore_031.png,test/split_pngs/현악취타-길타령_piri_56.png,"(29, 5, 90, 76)",0.314287

@@ -1,0 +1,17 @@
+symbol_name,img_path,bbox,conf
+test/synth/src/notes/eung.png,test/split_pngs/여민락_daegeum_2622.png,"(15, 12, 61, 58)",0.9138485
+test/synth/src/notes/eung_d.png,test/split_pngs/자진한잎-염양춘_daegeum_25.png,"(55, 53, 102, 97)",0.89927924
+test/synth/src/notes/hwang.png,test/split_pngs/남창우조-언락_daegeum_134.png,"(28, 41, 79, 93)",0.96626383
+test/synth/src/notes/hyeop_dd.png,test/split_pngs/관악영산회상-타령_daegeum_107.png,"(20, 20, 68, 62)",0.9570503
+test/synth/src/symbols/diff-str-2_002.png,test/split_pngs/보허사_geomungo_234.png,"(74, 49, 100, 113)",0.956506
+test/synth/src/symbols/diff-str-fast_003.png,test/split_pngs/현악취타-취타_geomungo_180.png,"(73, 35, 99, 88)",0.9528429
+test/synth/src/symbols/fermata_002.png,test/split_pngs/여창반우반계-반엽_daegeum_185.png,"(75, 14, 91, 32)",0.9350966
+test/synth/src/symbols/ignore_031.png,test/split_pngs/남창우조-우롱_geomungo_246.png,"(24, 65, 85, 136)",0.9377793
+test/synth/src/symbols/ignore_041.png,test/split_pngs/여민락_haegeum_2411.png,"(42, 51, 66, 72)",0.93568707
+test/synth/src/symbols/neunanina_001.png,test/split_pngs/천년만세-계면가락도드리_piri_215.png,"(33, 58, 58, 72)",0.94246435
+test/synth/src/symbols/neuneneu_001.png,test/split_pngs/평조회상-상현도드리_daegeum_198.png,"(69, 47, 93, 81)",0.99166965
+test/synth/src/symbols/nineurani_001.png,test/split_pngs/천년만세-우조가락도드리_piri_353.png,"(43, 34, 72, 50)",0.9408555
+test/synth/src/symbols/niro_001.png,test/split_pngs/독주곡-청성자진한잎_daegeum_210.png,"(81, 37, 96, 55)",0.96946627
+test/synth/src/symbols/no_002.png,test/split_pngs/밑도드리_geomungo_195.png,"(73, 50, 100, 86)",0.9047622
+test/synth/src/symbols/shake-rep_002.png,test/split_pngs/영산회상-상령산_piri_150.png,"(65, 72, 91, 115)",0.9760251
+test/synth/src/symbols/shake_002.png,test/split_pngs/자진한잎-경풍년-변조두거_piri_209.png,"(37, 69, 61, 114)",0.98205686

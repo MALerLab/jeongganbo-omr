@@ -3,16 +3,14 @@ from collections import defaultdict
 
 import cv2
 
-from jngbomr import JeongganboReader
-from jngbomr import PIECE, START_PAGE
+from ..jeonggan_utils import JeongganboReader
+from ..jeonggan_utils import PIECE, START_PAGE
 
 
-def main():
-  preprocess_dir = Path(__file__).parent
+def split_page_to_jeonggans(jeongganbo_images_dir:Path): 
+  split_page_dir = jeongganbo_images_dir / 'split_pages'
   
-  split_page_dir = preprocess_dir / 'split_pages'
-  
-  split_jeonggan_dir = preprocess_dir / 'split_jeonggans'
+  split_jeonggan_dir = jeongganbo_images_dir / 'split_jeonggans'
   split_jeonggan_dir.mkdir(exist_ok=True, parents=True)
   
   reader = JeongganboReader()
@@ -22,7 +20,8 @@ def main():
   # Parse all pieces for each instrument
   for instrument in instruments:
     print(f"Parsing {instrument}...")
-    page_paths = list(sorted(split_page_dir.glob(f'{instrument}_pg-*.png')))
+    page_paths = split_page_dir.glob(f'{instrument}_pg-*.png')
+    page_paths = list(sorted(page_paths))
     
     if len(page_paths) < 1:
       print(f"No pages found for {instrument}.")
@@ -65,13 +64,13 @@ def main():
   }
 
   # Save each jeonggan as a separate PNG file
-  for piece_name, piece in dict_by_clean_piece_name.item():
+  for piece_name in dict_by_clean_piece_name:
+    piece = dict_by_clean_piece_name[piece_name]
+    piece_name = piece_name.replace(' ', '-')
+    
     for inst in piece:
       parsed_piece = piece[inst]
+      
       for jeonggan in parsed_piece.jeonggans:
-        img_path = split_jeonggan_dir / f"{piece_name.replace(' ', '-')}_{inst}_{jeonggan.piece_beat}.png"
+        img_path = split_jeonggan_dir / f"{piece_name}_{inst}_{jeonggan.piece_beat}.png"
         cv2.imwrite(str(img_path), jeonggan.img)
-
-
-if __name__ == "__main__":
-  main()

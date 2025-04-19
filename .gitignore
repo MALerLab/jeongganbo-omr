@@ -1,6 +1,9 @@
 notebooks_local/
 outputs/
 
+dataset/**/*.pdf
+dataset/**/*.png
+
 pdfs/
 pngs/
 prev_results/

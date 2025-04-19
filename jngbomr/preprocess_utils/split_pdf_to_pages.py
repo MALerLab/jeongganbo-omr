@@ -2,17 +2,15 @@ from pathlib import Path
 from tqdm import tqdm
 import pdfplumber
 
-from jngbomr import PIECE
+from ..jeonggan_utils import PIECE
 
 
-def main():
-  preprocess_dir = Path(__file__).parent
-
+def split_pdf_to_pages(jeongganbo_images_dir:Path):
   # List of instrument names
   instruments = PIECE.keys()
 
-  scorebook_dir = preprocess_dir / 'scorebooks'
-  split_page_dir = preprocess_dir / 'split_pages'
+  scorebook_dir = jeongganbo_images_dir / 'scorebooks'
+  split_page_dir = jeongganbo_images_dir / 'split_pages'
   split_page_dir.mkdir(exist_ok=True, parents=True)
 
   for instrument in instruments:
@@ -30,9 +28,3 @@ def main():
       
       image_path = split_page_dir / f'{instrument}_pg-{page_number}.png'
       image.save(str(image_path))
-
-
-if __name__ == '__main__':
-  main()
-
-

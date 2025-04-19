@@ -214,7 +214,11 @@ class JeongganboReader:
 
     right_page = Page(right_page, right_jeonggan_boxes, right_thick_boxes, right_h_contours, None)
     left_page = Page(left_page, left_jeonggan_boxes, left_thick_boxes, left_h_contours, title_box)
-
+    
+    if self.run_omr:
+      self.run_omr_on_page(right_page)
+      self.run_omr_on_page(left_page)
+    
     return left_page, right_page
 
 
@@ -395,8 +399,8 @@ class Jeonggan:
     return
 
   def __repr__(self) -> str:
-    return f"Jeonggan at Gak {self.gak_id}, Daegang {self.daegang_id}, Beat {self.beat}, Piece Beat {self.piece_beat}, img ({self.x}, {self.y})"  
-
+    return f"Jeonggan at Gak {self.gak_id}, Daegang {self.daegang_id}, Beat {self.beat}, Piece Beat {self.piece_beat}, img ({self.x}, {self.y})"
+  
 
 
 class Gak:

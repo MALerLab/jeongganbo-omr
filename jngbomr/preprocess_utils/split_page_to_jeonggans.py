@@ -50,12 +50,12 @@ def split_page_to_jeonggans(jeongganbo_images_dir:Path):
   # Check if all instruments have the same number of jeonggans for each piece
   clean_piece_names = []
   for piece in dict_by_piece_name:
-    len_jeonggans = [
-      len(dict_by_piece_name[piece][inst].jeonggans) 
+    len_jeonggans = {
+      inst: len(dict_by_piece_name[piece][inst].jeonggans) 
       for inst in dict_by_piece_name[piece]
-    ]
+    }
     
-    if len(set(len_jeonggans)) == 1:
+    if len(set(len_jeonggans.values())) == 1:
       clean_piece_names.append(piece)
 
   dict_by_clean_piece_name = {

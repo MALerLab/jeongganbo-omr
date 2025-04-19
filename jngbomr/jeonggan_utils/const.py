@@ -115,32 +115,32 @@ PIECE['geomungo'] = [
 
 
 START_PAGE = {}
-START_PAGE['piri'] = 22
-START_PAGE['daegeum'] = 18
-START_PAGE['haegeum'] = 21
+START_PAGE['piri'] = 21
+START_PAGE['daegeum'] = 16
+START_PAGE['haegeum'] = 19
 START_PAGE['geomungo'] = 17
 START_PAGE['gayageum'] = 21
-START_PAGE['ajaeng'] = 15
+START_PAGE['ajaeng'] = 13
 
 
 PAGE_REPAIRS = {
-  'ajaeng_pg-036': [
+  'piri_pg-074': [
     {
       'type': 'line',
       'vertices': [
-        (1740, 621),
-        (1740, 621+831),
+        (1523, 490),
+        (1523, 490+1106),
       ]
     },
     {
       'type': 'line',
       'vertices': [
-        (1842, 621),
-        (1842, 621+831),
+        (1625, 490),
+        (1625, 490+1106),
       ]
-    },
+    }
   ],
-  'piri_pg-036': [
+  'piri_pg-085': [
     {
       'type': 'line',
       'vertices': [
@@ -169,12 +169,174 @@ PAGE_REPAIRS = {
         (1907+102, 2404),
       ]
     },
+    {
+      'type': 'line',
+      'vertices': [
+        (646, 2404),
+        (646+102, 2404),
+      ]
+    },
+    {
+      'type': 'line',
+      'vertices': [
+        (1366, 1805),
+        (1366+102, 1805),
+      ]
+    },
+    {
+      'type': 'line',
+      'vertices': [
+        (1366, 1924),
+        (1366+102, 1924),
+      ]
+    },
+    {
+      'type': 'rect',
+      'vertices': [
+        (1723, 1800),
+        (1723+103, 1800+9),
+      ]
+    },
+    {
+      'type': 'line',
+      'line_width': 2,
+      'vertices': [
+        (1726, 1800),
+        (1726, 1800+11),
+      ]
+    },
+    {
+      'type': 'line',
+      'line_width': 2,
+      'vertices': [
+        (1726, 1804),
+        (1726+101, 1804),
+      ]
+    },
+  ],
+  'piri_pg-237': [
+    {
+      'type': 'line',
+      'line_width': 2,
+      'vertices': [
+        (1062, 942),
+        (1062+45, 942),
+      ]
+    },
+  ],
+  'daegeum_pg-086': [
+    {
+      'type': 'rect',
+      'vertices': [
+        (1703, 490),
+        (1703+3, 490+10),
+      ]
+    },
+    {
+      'type': 'rect',
+      'vertices': [
+        (1813, 490),
+        (1813+3, 490+10),
+      ]
+    },
+    {
+      'type': 'rect',
+      'vertices': [
+        (1703, 1208),
+        (1703+3, 1208+14),
+      ]
+    },
+    {
+      'type': 'rect',
+      'vertices': [
+        (1703, 1327),
+        (1703+3, 1327+14),
+      ]
+    },
+    {
+      'type': 'rect',
+      'vertices': [
+        (1706, 1683),
+        (1706+109, 1683+6),
+      ]
+    },
+  ],
+  'daegeum_pg-151': [
+    {
+      'type': 'rect',
+      'vertices': [
+        (470, 2606),
+        (470+135, 2606+283),
+      ]
+    },
+    {
+      'type': 'line',
+      'line_width': 2,
+      'vertices': [
+        (482, 2598),
+        (482+105, 2598),
+      ]
+    },
+    {
+      'type': 'line',
+      'line_width': 3,
+      'vertices': [
+        (482, 2606),
+        (482+105, 2606),
+      ]
+    },
+  ],
+  'gayageum_pg-060': [
+    {
+      'type': 'line',
+      'vertices': [
+        (996, 1573), 
+        (996+101, 1573), 
+      ]
+    },
   ],
   'gayageum_pg-061': [
     {
       'type': 'rect',
       'vertices': [
-        (348, 2078, 866, 798),
+        (348, 2078), 
+        (348+866, 2078+798),
+      ]
+    },
+  ],
+  'gayageum_pg-087': [
+    {
+      'type': 'line',
+      'vertices': [
+        (449, 2409), 
+        (449+101, 2409), 
+      ]
+    },
+  ],
+  'geomungo_pg-103': [
+    {
+      'type': 'rect',
+      'vertices': [
+        (994, 2295),
+        (994+98, 2295+20),
+      ]
+    },
+  ],
+  'geomungo_pg-127': [
+    {
+      'type': 'line',
+      'line_width': 2,
+      'vertices': [
+        (1454, 691),
+        (1454, 691+48),
+      ]
+    },
+    {
+      'type': 'line',
+      'line_width': 2,
+      'vertices': [
+        (1454, 1040),
+        (1454, 1040+53),
       ]
     },
   ],
@@ -186,7 +348,41 @@ PAGE_REPAIRS = {
         (1893+102, 2191),
       ]
     },
-  ]
+  ],
+  'geomungo_pg-204': [
+    {
+      'type': 'rect',
+      'vertices': [
+        (810, 670),
+        (810+109, 670+410),
+      ]
+    },
+  ],
+  'geomungo_pg-218': [
+    {
+      'type': 'rect',
+      'vertices': [
+        (789, 671),
+        (789+132, 671+411),
+      ]
+    },
+  ],
+  'ajaeng_pg-036': [
+    {
+      'type': 'line',
+      'vertices': [
+        (1740, 621),
+        (1740, 621+831),
+      ]
+    },
+    {
+      'type': 'line',
+      'vertices': [
+        (1842, 621),
+        (1842, 621+831),
+      ]
+    },
+  ],
 }
 
 

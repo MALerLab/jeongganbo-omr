@@ -1,3 +1,4 @@
 from .download_scorebooks import download_scorebooks
 from .split_pdf_to_pages import split_pdf_to_pages
+from .repair_page_images import repair_page_images
 from .split_page_to_jeonggans import split_page_to_jeonggans

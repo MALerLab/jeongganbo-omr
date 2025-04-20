@@ -5,7 +5,7 @@ from .jeonggan_utils import JeongganboPageDrawer, JeongganboReader
 from .jeonggan_utils import PIECE, START_PAGE
 from .jeonggan_utils import NAME_EN_TO_KR, NAME_KR_TO_EN, NOTE_W_DUR_EN_SET, PNAME_LIST, PNAME_EN_LIST, SPECIAL_CHAR_TO_NAME, PNAME_EN_TO_KR, PNAME_KR_TO_EN, SYMBOL_W_DUR_LIST, SYMBOL_W_DUR_EN_LIST, SYMBOL_WO_DUR_LIST, SYMBOL_WO_DUR_EN_LIST, SYMBOL_WO_DUR_ADD_EN_LIST, SYMBOL_LIST, SYMBOL_EN_LIST, SYMBOL_W_DUR_EN_TO_KR, SYMBOL_W_DUR_KR_TO_EN, SYMBOL_WO_DUR_EN_TO_KR, SYMBOL_WO_DUR_KR_TO_EN
 
-from .preprocess_utils import download_scorebooks, split_pdf_to_pages, repair_page_images, split_page_to_jeonggans
+from .preprocess_utils import download_scorebooks, split_pdf_to_pages, repair_page_images, split_page_to_jeonggans, prepare_symbols
 
 from .data_utils import pad_collate
 from .data_utils import RandomBoundaryDrop, Dataset, LabelStudioDataset

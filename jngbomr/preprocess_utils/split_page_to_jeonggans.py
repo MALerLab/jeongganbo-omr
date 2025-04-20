@@ -7,10 +7,10 @@ from ..jeonggan_utils import JeongganboReader
 from ..jeonggan_utils import PIECE, START_PAGE
 
 
-def split_page_to_jeonggans(jeongganbo_images_dir:Path): 
-  split_page_dir = jeongganbo_images_dir / 'split_pages'
+def split_page_to_jeonggans(jeongganbo_dir:Path): 
+  split_page_dir = jeongganbo_dir / 'split_pages'
   
-  split_jeonggan_dir = jeongganbo_images_dir / 'split_jeonggans'
+  split_jeonggan_dir = jeongganbo_dir / 'split_jeonggans'
   split_jeonggan_dir.mkdir(exist_ok=True, parents=True)
   
   reader = JeongganboReader()

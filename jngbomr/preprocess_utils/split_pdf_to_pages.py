@@ -5,12 +5,12 @@ import pdfplumber
 from ..jeonggan_utils import PIECE
 
 
-def split_pdf_to_pages(jeongganbo_images_dir:Path):
+def split_pdf_to_pages(jeongganbo_dir:Path):
   # List of instrument names
   instruments = PIECE.keys()
 
-  scorebook_dir = jeongganbo_images_dir / 'scorebooks'
-  split_page_dir = jeongganbo_images_dir / 'split_pages'
+  scorebook_dir = jeongganbo_dir / 'scorebooks'
+  split_page_dir = jeongganbo_dir / 'split_pages'
   split_page_dir.mkdir(exist_ok=True, parents=True)
 
   for instrument in instruments:

@@ -12,8 +12,8 @@ PDF_URL = dict(
 )
 
 
-def download_scorebooks(jeongganbo_images_dir:Path):  
-  scorebook_dir = jeongganbo_images_dir / 'scorebooks'
+def download_scorebooks(jeongganbo_dir:Path):  
+  scorebook_dir = jeongganbo_dir / 'scorebooks'
   scorebook_dir.mkdir(parents=True, exist_ok=True)
   
   for inst, url in PDF_URL.items():

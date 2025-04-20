@@ -167,7 +167,6 @@ test/synth/src/symbols/neuna_001.png,test/split_pngs/여민락_daegeum_29.png,"(
 test/synth/src/symbols/neuna_002.png,test/split_pngs/여창계면-두거_haegeum_220.png,"(42, 102, 62, 128)",0.9371495
 test/synth/src/symbols/neuna_003.png,test/split_pngs/독주곡-상령산_piri_114.png,"(42, 91, 63, 120)",0.89886206
 test/synth/src/symbols/neunareunani_001.png,test/split_pngs/여민락_daegeum_2777.png,"(34, 76, 61, 91)",0.9995431
-test/synth/src/symbols/neuneneu_001.png,test/split_pngs/평조회상-상현도드리_daegeum_198.png,"(69, 47, 93, 81)",0.9001827
 test/synth/src/symbols/neuni.png,test/split_pngs/여민락_daegeum_788.png,"(44, 79, 61, 109)",0.999706
 test/synth/src/symbols/neuni_001.png,test/split_pngs/여민락_daegeum_788.png,"(44, 79, 61, 109)",0.999706
 test/synth/src/symbols/neuni_002.png,test/split_pngs/영산회상-중령산_haegeum_81.png,"(39, 80, 61, 108)",0.9999076
@@ -279,22 +278,23 @@ test/synth/src/symbols/vib-long_002.png,test/split_pngs/남창계면-삼수대�
 test/synth/src/symbols/vib-long_003.png,test/split_pngs/수제천_haegeum_352.png,"(74, 10, 88, 84)",0.99954313
 test/synth/src/symbols/vib_001.png,test/split_pngs/여민락_daegeum_153.png,"(85, 30, 93, 100)",0.99956286
 test/synth/src/symbols/vib_002.png,test/split_pngs/관악영산회상-중령산_haegeum_157.png,"(79, 49, 91, 99)",0.9994221
-test/synth/src/notes/hwang.png,test/split_pngs/독주곡-헌천수_daegeum_75.png,"(38, 62, 89, 114)",0.77668506
-test/synth/src/notes/hyeop_dd.png,test/split_pngs/현악취타-길타령_gayageum_29.png,"(27, 25, 75, 67)",0.7352472
-test/synth/src/symbols/diff-str-2_002.png,test/split_pngs/보허사_geomungo_234.png,"(74, 49, 100, 113)",0.6243901
-test/synth/src/symbols/diff-str-fast_003.png,test/split_pngs/현악취타-취타_geomungo_180.png,"(73, 35, 99, 88)",0.68871033
-test/synth/src/symbols/fermata_002.png,test/split_pngs/영산회상-염불도드리_haegeum_67.png,"(51, 43, 67, 61)",0.7066075
 test/synth/src/symbols/ignore_001.png,test/split_pngs/밑도드리_geomungo_341.png,"(76, 67, 98, 86)",0.6432872
 test/synth/src/symbols/ignore_002.png,test/split_pngs/영산회상-중령산_haegeum_356.png,"(81, 120, 101, 134)",0.74729764
 test/synth/src/symbols/ignore_003.png,test/split_pngs/밑도드리_geomungo_341.png,"(76, 64, 98, 86)",0.67877305
-test/synth/src/symbols/ignore_026.png,test/split_pngs/여창계면-편수대엽_geomungo_109.png,"(73, 17, 99, 95)",0.6666372
-test/synth/src/symbols/ignore_041.png,test/split_pngs/여민락_haegeum_2411.png,"(42, 51, 66, 72)",0.6267228
-test/synth/src/symbols/neunanina_001.png,test/split_pngs/여민락_piri_1476.png,"(64, 58, 89, 72)",0.6261988
-test/synth/src/symbols/nineurani_001.png,test/split_pngs/평조회상-상령산_daegeum_263.png,"(37, 84, 66, 100)",0.6641791
-test/synth/src/symbols/niro_001.png,test/split_pngs/독주곡-청성자진한잎_daegeum_210.png,"(81, 37, 96, 55)",0.78356516
-test/synth/src/symbols/no_002.png,test/split_pngs/밑도드리_geomungo_195.png,"(73, 50, 100, 86)",0.6233411
-test/synth/src/symbols/shake-rep_002.png,test/split_pngs/영산회상-상령산_piri_150.png,"(65, 72, 91, 115)",0.77323705
-test/synth/src/symbols/shake_002.png,test/split_pngs/여민락_ajaeng_371.png,"(37, 40, 61, 85)",0.7541703
-test/synth/src/notes/eung.png,test/split_pngs/관악영산회상-상령산_piri_187.png,"(37, 33, 83, 79)",0.39119133
-test/synth/src/notes/eung_d.png,test/split_pngs/남창우조-두거_piri_208.png,"(28, 85, 75, 129)",0.3879301
-test/synth/src/symbols/ignore_031.png,test/split_pngs/현악취타-길타령_piri_56.png,"(29, 5, 90, 76)",0.314287
+test/synth/src/notes/eung.png,dataset/jeongganbo/split_pages/daegeum_pg-259.png,"(1206, 1111, 1206+63, 1111+69)",0 
+test/synth/src/notes/eung_d.png,dataset/jeongganbo/split_pages/geomungo_pg-259.png,"(1197, 1123, 1197+50, 1123+51)",0
+test/synth/src/notes/hwang.png,dataset/jeongganbo/split_pages/daegeum_pg-258.png,"(1709, 505, 1709+52, 505+56)",0
+test/synth/src/notes/hyeop_dd.png,dataset/jeongganbo/split_pages/geomungo_pg-268.png,"(1372, 2199, 1372+49, 2199+52)",0
+test/synth/src/symbols/diff-str-2_002.png,dataset/jeongganbo/split_pages/geomungo_pg-157.png,"(1426, 669, 1426+27, 669+65)",0
+test/synth/src/symbols/diff-str-fast_003.png,dataset/jeongganbo/split_pages/geomungo_pg-104.png,"(1965, 727, 1965+28, 727+53)",0
+test/synth/src/symbols/fermata_002.png,dataset/jeongganbo/split_pages/daegeum_pg-258.png,"(946, 1483, 946+24, 1483+27)",0
+test/synth/src/symbols/fermata_002.png,dataset/jeongganbo/split_jeonggans/수제천_piri_45.png,"(75, 85, 75+22, 85+24)",0
+test/synth/src/symbols/ignore_026.png,dataset/jeongganbo/split_pages/geomungo_pg-289.png,"(1605, 1332, 1605+25, 1332+58)",0
+test/synth/src/symbols/ignore_041.png,dataset/jeongganbo/split_pages/geomungo_pg-268.png,"(1421, 2217, 1421+24, 2217+22)",0
+test/synth/src/symbols/neunanina_001.png,dataset/jeongganbo/split_pages/daegeum_pg-011.png,"(350, 2204, 350+44, 2204+29)",0
+test/synth/src/symbols/nineurani_001.png,dataset/jeongganbo/split_pages/daegeum_pg-011.png,"(352, 1887, 352+40, 1887+27)",0
+test/synth/src/symbols/neuneneu_001.png,dataset/jeongganbo/split_pages/daegeum_pg-013.png,"(353, 817, 353+35, 817+48)",0
+test/synth/src/symbols/niro_001.png,dataset/jeongganbo/split_pages/daegeum_pg-012.png,"(378, 1355, 378+30, 1355+35)",0
+test/synth/src/symbols/no_002.png,dataset/jeongganbo/split_pages/geomungo_pg-124.png,"(1785, 2138, 1785+28, 2138+42)",0
+test/synth/src/symbols/shake-rep_002.png,dataset/jeongganbo/split_pages/daegeum_pg-258.png,"(1162, 2780, 1162+43, 2780+56)",0
+test/synth/src/symbols/shake_002.png,dataset/jeongganbo/split_pages/daegeum_pg-265.png,"(511, 927, 511+48, 927+58)",0

@@ -7,11 +7,11 @@ from ..jeonggan_utils import JeongganboReader
 from ..jeonggan_utils import PAGE_REPAIRS
 
 
-def repair_page_images(jeongganbo_images_dir:Path, overwrite:bool=False):
-  split_pages_dir = jeongganbo_images_dir / 'split_pages'
+def repair_page_images(jeongganbo_dir:Path, overwrite:bool=False):
+  split_pages_dir = jeongganbo_dir / 'split_pages'
   
   if not overwrite:
-    save_dir = jeongganbo_images_dir /  'repaired_pages'
+    save_dir = jeongganbo_dir /  'repaired_pages'
     save_dir.mkdir(parents=True, exist_ok=True)
   
   for page_fn, repairs  in PAGE_REPAIRS.items():

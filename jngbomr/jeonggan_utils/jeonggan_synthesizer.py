@@ -31,12 +31,12 @@ OCTAVE_RANGE = 6
 
 # PITCH_ORDER: 'hwang', 'dae', 'tae', 'hyeop', 'go', 'joong', 'yoo', 'lim', 'ee', 'nam', 'mu', 'eung'
 PITCH_ORDER = [
-                                                                      'lim_ddd',  None,     None,       None,    None,
-  'hwang_dd', None, 'tae_dd', 'hyeop_dd',  None,   'joong_dd', None,  'lim_dd',  'ee_dd',  'nam_dd',   'mu_dd',  None,
-  'hwang_d',  None, 'tae_d',  'hyeop_d',  'go_d',  'joong_d',  None,  'lim_d',   'ee_d',   'nam_d',    'mu_d',   'eung_d',
+                                                                      'lim-ddd',  None,     None,       None,    None,
+  'hwang-dd', None, 'tae-dd', 'hyeop-dd',  None,   'joong-dd', None,  'lim-dd',  'ee-dd',  'nam-dd',   'mu-dd',  None,
+  'hwang-d',  None, 'tae-d',  'hyeop-d',  'go-d',  'joong-d',  None,  'lim-d',   'ee-d',   'nam-d',    'mu-d',   'eung-d',
   'hwang',    None, 'tae',    'hyeop',    'go',    'joong',    None,  'lim',     'ee',     'nam',      'mu',     'eung',
-  'hwang_u',  None, 'tae_u',  'hyeop_u',  'go_u',  'joong_u',  None,  'lim_u',   None,     'nam_u',    'mu_u',   None,
-  'hwang_uu'
+  'hwang-u',  None, 'tae-u',  'hyeop-u',  'go-u',  'joong-u',  None,  'lim-u',   None,     'nam-u',    'mu-u',   None,
+  'hwang-uu'
 ]
 
 class JeongganSynthesizer:

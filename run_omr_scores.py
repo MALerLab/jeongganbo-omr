@@ -4,14 +4,14 @@ from collections import defaultdict
 
 from jngbomr import JeongganboReader, Piece
 from jngbomr import PIECE, START_PAGE
-from jngomr import INFERENCER_DEFAULT_KWARGS
+from jngbomr import INFERENCER_DEFAULT_KWARGS
 
 
 class MultipleParser:
   def __init__(
     self,
-    png_dir='dataset/jeongganbo_images/split_pages/',
-    out_dir='omr_results/multiple/',
+    png_dir='dataset/jeongganbo/split_pages/',
+    out_dir='dataset/jeongganbo/omr_results_scores/',
     piece_name_by_inst:dict=PIECE,
     start_page:dict=START_PAGE
   ) -> None:
@@ -29,7 +29,7 @@ class MultipleParser:
     
     self.piece_name_by_inst = piece_name_by_inst
     self.start_page = start_page
-    self.inst_names = list(piece_name_by_inst.keys())
+    self.inst_names = ['daegeum', 'piri', 'haegeum', 'ajaeng', 'gayageum', 'geomungo']
     
     self.pieces_by_instrument = {}
   

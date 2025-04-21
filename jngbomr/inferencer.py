@@ -1,8 +1,10 @@
 from pathlib import Path
-from omegaconf import OmegaConf
 
 import cv2
 import numpy as np
+
+from omegaconf import OmegaConf
+
 import torch
 from torchvision import transforms
 
@@ -22,10 +24,10 @@ INFERENCER_DEFAULT_KWARGS = dict(
 class Inferencer:
   def __init__(
     self, 
-    vocab_txt_fn='checkpoints/best/tokenizer.txt', 
-    model_config_path='checkpoints/best/config.yaml',
-    model_weights='checkpoints/best/model.pt',
-    device='cuda',
+    vocab_txt_fn=INFERENCER_DEFAULT_KWARGS['vocab_txt_fn'], 
+    model_config_path=INFERENCER_DEFAULT_KWARGS['model_config_path'],
+    model_weights=INFERENCER_DEFAULT_KWARGS['model_weights'],
+    device=INFERENCER_DEFAULT_KWARGS['device'],
   ):
     conf = OmegaConf.load(model_config_path)
     

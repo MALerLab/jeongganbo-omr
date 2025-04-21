@@ -12,9 +12,9 @@ import wandb
 import torch
 from torch.utils.data import DataLoader
 
-from exp_utils.jeonggan_synthesizer import get_img_paths
-from exp_utils.model_zoo import OMRModel, TransformerOMR
-from exp_utils.train_utils import CosineLRScheduler, Dataset, pad_collate, Trainer, get_nll_loss, LabelStudioDataset, draw_low_confidence_plot
+from jngbomr import get_img_paths
+from jngbomr import TransformerOMR
+from jngbomr import CosineLRScheduler, Dataset, pad_collate, Trainer, get_nll_loss, LabelStudioDataset, draw_low_confidence_plot
 
 
 
@@ -46,18 +46,18 @@ def main(conf: DictConfig):
   
   print('\ndata_set loading...')
   
-  note_img_path_dict = get_img_paths(original_wd / 'test/synth/src', ['notes', 'symbols'])
+  note_img_path_dict = get_img_paths(original_wd / 'dataset/jeongganbo/synth/', ['notes', 'symbols'])
   
   train_set = Dataset(original_wd /conf.data_path.train, note_img_path_dict, synth_config=dict(conf.synth))
   
   if conf.data_path.train_aux:
-    aux_train_set = LabelStudioDataset(original_wd /conf.data_path.train_aux, original_wd / 'jeongganbo-png/splited-pngs')
+    aux_train_set = LabelStudioDataset(original_wd /conf.data_path.train_aux, original_wd / 'dataset/jeongganbo/split_jeonggans')
   
   valid_set_synthed = Dataset(original_wd /conf.data_path.valid_synthed, note_img_path_dict, is_valid=True)
-  valid_set_HL = LabelStudioDataset(original_wd /conf.data_path.valid_HL, original_wd / 'jeongganbo-png/splited-pngs', remove_borders=True, is_valid=True)
+  valid_set_HL = LabelStudioDataset(original_wd /conf.data_path.valid_HL, original_wd / 'dataset/jeongganbo/split_jeonggans', remove_borders=True, is_valid=True)
   
   if conf.data_path.test:
-    test_set = LabelStudioDataset(original_wd / conf.data_path.test, original_wd / 'jeongganbo-png/splited-pngs', remove_borders=conf.test_setting.remove_borders, is_valid=True)
+    test_set = LabelStudioDataset(original_wd / conf.data_path.test, original_wd / 'dataset/jeongganbo/split_jeonggans', remove_borders=conf.test_setting.remove_borders, is_valid=True)
   
   train_batch_size = conf.dataloader.batch_size
   aux_loader = None
@@ -106,22 +106,24 @@ def main(conf: DictConfig):
   logger = logging.getLogger(__name__)
   logging.basicConfig(filename='best_checkpoint_log.csv', format='%(message)s', level=logging.INFO)
 
-  trainer = Trainer(model, 
-                    optimizer, 
-                    get_nll_loss, 
-                    train_loader, 
-                    valid_synthed_loader, 
-                    tokenizer,
-                    scheduler=scheduler,
-                    aux_loader=aux_loader if aux_loader else None,
-                    aux_freq=conf.dataloader.aux_freq,
-                    mix_aux=conf.dataloader.mix_aux,
-                    aux_valid_loader=valid_HL_loader,
-                    device=device, 
-                    wandb=wandb_run, 
-                    model_name=conf.general.model_name,
-                    model_save_path='model',
-                    checkpoint_logger=logger)
+  trainer = Trainer(
+    model, 
+    optimizer, 
+    get_nll_loss, 
+    train_loader, 
+    valid_synthed_loader, 
+    tokenizer,
+    scheduler=scheduler,
+    aux_loader=aux_loader if aux_loader else None,
+    aux_freq=conf.dataloader.aux_freq,
+    mix_aux=conf.dataloader.mix_aux,
+    aux_valid_loader=valid_HL_loader,
+    device=device, 
+    wandb=wandb_run, 
+    model_name=conf.general.model_name,
+    model_save_path='model',
+    checkpoint_logger=logger
+  )
   
   print('COMPLETE: model initializing')
   
@@ -162,22 +164,24 @@ def main(conf: DictConfig):
       
       test_model.load_state_dict(torch.load(f'model/{conf.general.model_name}_HL_{conf.test_setting.target_metric}_best.pt', map_location='cpu')['model'])
       
-      tester = Trainer(test_model, 
-                        None, 
-                        None, 
-                        None, 
-                        test_loader, 
-                        tokenizer,
-                        scheduler=None,
-                        aux_loader=None,
-                        aux_freq=None,
-                        mix_aux=None,
-                        aux_valid_loader=None,
-                        device=device, 
-                        wandb=wandb_run, 
-                        model_name=conf.general.model_name,
-                        model_save_path='model',
-                        checkpoint_logger=None)
+      tester = Trainer(
+        test_model, 
+        None, 
+        None, 
+        None, 
+        test_loader, 
+        tokenizer,
+        scheduler=None,
+        aux_loader=None,
+        aux_freq=None,
+        mix_aux=None,
+        aux_valid_loader=None,
+        device=device, 
+        wandb=wandb_run, 
+        model_name=conf.general.model_name,
+        model_save_path='model',
+        checkpoint_logger=None
+      )
       
       test_acc, test_metric_dict, test_pred_list, test_confi_list = tester.validate(with_confidence=True)
       test_bot_30 = draw_low_confidence_plot(test_set, test_confi_list, test_pred_list)
@@ -200,4 +204,3 @@ def main(conf: DictConfig):
 
 if __name__ == "__main__":
   main()
-  # debug()

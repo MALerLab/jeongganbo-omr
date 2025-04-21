@@ -1,21 +1,24 @@
+defaults:
+  - synth: full
+
 general:
-  device: cuda:1
+  device: cuda
   model_name: jeongganbo_omr
   random_seed: 2
   random_seed_synth: 4
 
 wandb:
   project: jeonggan-omr
-  entity: <YOUR_WANDB_ENTITY>
-  do_log: false
+  entity: team-halsoo
+  do_log: true
   is_sweep: false
 
 data_path:
-  train: data/train/008_4M_1712090605.csv
-  train_aux: low_confident_pairs_filtered.csv
-  valid_synthed: data/valid/008_4M_1712093199.csv
-  valid_HL: data/valid/HL_valid_set_nodups.csv
-  test: data/HL_test_set_nodups.csv
+  train: dataset/train/008_4M_1712090605.csv
+  train_aux: dataset/train/low_confident_pairs_filtered.csv
+  valid_synthed: dataset/validation/008_4M_1712093199.csv
+  valid_HL: dataset/validation/HL_valid_set_nodups.csv
+  test: dataset/test/HL_test_set_nodups.csv
 
 test_setting:
   remove_borders: true

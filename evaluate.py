@@ -207,22 +207,24 @@ def test(project_root_dir, exp_dir, csv_path):
   model = TransformerOMR(conf.model.dim, len(tokenizer.vocab), enc_depth=conf.model.enc_depth, dec_depth=conf.model.dec_depth, num_heads=conf.model.num_heads, dropout=conf.model.dropout)
   model.load_state_dict(torch.load(model_dir / f'{conf.general.model_name}_HL_{conf.test_setting.target_metric}_best.pt', map_location='cpu')['model'])
 
-  tester = Trainer(model, 
-                  None, #optimizer
-                  None, #loss_fn
-                  None, #train_loader
-                  test_loader, 
-                  tokenizer,
-                  device=device, 
-                  scheduler=None,
-                  aux_loader=None,
-                  aux_freq=None,
-                  mix_aux=None,
-                  aux_valid_loader=None,
-                  wandb=None, 
-                  model_name=conf.general.model_name,
-                  model_save_path=model_dir,
-                  checkpoint_logger=None)
+  tester = Trainer(
+    model, 
+    None, #optimizer
+    None, #loss_fn
+    None, #train_loader
+    test_loader, 
+    tokenizer,
+    device=device, 
+    scheduler=None,
+    aux_loader=None,
+    aux_freq=None,
+    mix_aux=None,
+    aux_valid_loader=None,
+    wandb=None, 
+    model_name=conf.general.model_name,
+    model_save_path=model_dir,
+    checkpoint_logger=None
+  )
 
   print('COMPLETE: model initializing')
   

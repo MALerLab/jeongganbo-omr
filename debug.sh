@@ -1,1 +1,0 @@
-python3 train_omr.py +wandb_log=false

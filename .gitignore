@@ -7,10 +7,6 @@ dataset/**/*.png
 pdfs/
 pngs/
 prev_results/
-!test/
-test/*
-!test/daegeum/
-!test/synth/
 
 graphs/
 data/

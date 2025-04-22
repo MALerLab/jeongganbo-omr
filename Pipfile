@@ -4,12 +4,23 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-opencv-python = "*"
-pdfplumber = "*"
-numpy = "*"
+opencv-python = "==4.9.0.80"
+pdfplumber = "==0.10.2"
+numpy = "==1.24.4"
 matplotlib = "*"
 pandas = "*"
 tqdm = "*"
+opencv-contrib-python = "*"
+label-studio-sdk = "*"
+easyocr = "*"
+torch = "==2.0.1"
+torchvision = "==0.15.2"
+wandb = "*"
+omegaconf = "*"
+x-transformers = "*"
+music21 = "*"
+hydra-core = "*"
+levenshtein = "*"
 
 [dev-packages]
 ipykernel = "*"

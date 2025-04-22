@@ -1,0 +1,42 @@
+defaults:
+  - synth: full
+
+general:
+  device: cuda
+  model_name: jeongganbo_omr
+  random_seed: 2
+  random_seed_synth: 4
+
+wandb:
+  project: jeonggan-omr
+  entity: team-halsoo
+  do_log: true
+  is_sweep: false
+
+data_path:
+  train: dataset/train/008_4M_1712090605.csv
+  train_aux: dataset/train/low_confident_pairs_filtered.csv
+  valid_synthed: dataset/validation/008_4M_1712093199.csv
+  valid_HL: dataset/validation/HL_valid_set_nodups.csv
+  test: dataset/test/HL_test_set_nodups.csv
+
+test_setting:
+  remove_borders: true
+  with_best: true
+  target_metric: 'exact_all'
+
+dataloader:
+  batch_size: 100
+  aux_freq: 100
+  aux_ratio: 0.01
+  mix_aux: false
+  num_workers_synth: 8
+  num_workers_load: 4
+
+model:
+  lr: 1e-3
+  dim: 128
+  num_heads: 8
+  enc_depth: 8
+  dec_depth: 4
+  dropout: 0.1
